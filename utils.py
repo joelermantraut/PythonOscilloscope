@@ -11,16 +11,16 @@ class SocketServer(asyncore.dispatcher):
         client, addr = self.accept()
         print "Connected to " + str(addr)
         SocketClientPlot(socket=client, address=addr).start()
-        
+
     def handle_close(self):
         self.close()
         print "Closing server."
-    
+
 def run_server():
     address = ('0.0.0.0',5000)
     server = SocketServer(address)
     try:
-        print "Server listening on " + str(address) 
+        print "Server listening on " + str(address)
         asyncore.loop(0.2, use_poll = True)
     except KeyboardInterrupt:
         print "Closing server."
