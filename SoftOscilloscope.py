@@ -4,18 +4,16 @@ import pyqtgraph as pg
 import numpy as np
 import signal
 
-class ButtonPanel(object):
-    def __init__(self, **kwargs):
-        button = QtGui.QPushButton('button')
-
 class BasePlot(object):
     def __init__(self, stream, **kwargs):
         self.stream = stream
         self.kwargs = kwargs
+
         try:
             self.app = QtGui.QApplication([])
         except RuntimeError:
             self.app = QtGui.QApplication.instance()
+
         self.view = pg.GraphicsView()
         self.layout = pg.GraphicsLayout(border=(100,100,100))
         self.view.closeEvent = self.handle_close_event
@@ -26,11 +24,18 @@ class BasePlot(object):
         self.view.showMaximized()
         self.plot_list = []
 
+        self.timer = None
+
     def set_options(self, plot, kwargs):
         if "xlim" in kwargs.keys():
-            plot.setXRange(kwargs["xlim"][0], kwargs["xlim"][1])
-        elif "ylim" in kwargs.keys():
-            plot.setYRange(kwargs["ylim"][0], kwargs["ylim"][1])
+            self.change_amplitude(kwargs["xlim"])
+        else:
+            self.change_amplitude(1.25)
+
+        if "ylim" in kwargs.keys():
+            self.change_time(kwargs["ylim"])
+        else:
+            self.change_time(1.25)
 
     def open_stream(self):
         print("Opening Stream")
@@ -44,10 +49,6 @@ class BasePlot(object):
         self.stream.close()
         print("Stream closed")
 
-    def handle_close_event(self, event):
-        self.close_stream()
-        self.app.exit()
-
     def read_stream(self):
         try:
             stream_data = self.stream.readline().rstrip().split(',')
@@ -55,6 +56,14 @@ class BasePlot(object):
             stream_data = self.stream.readline().decode('utf-8').rstrip().split(',')
 
         return stream_data
+
+    def change_amplitude(self, band):
+        for plot in self.plot_list:
+            plot.setYRange(-band / 2, band / 2)
+
+    def change_time(self, band):
+        for plot in self.plot_list:
+            plot.setXRange(0, band)
 
     def plot_init(self):
         for i in range(20):
@@ -64,13 +73,15 @@ class BasePlot(object):
             new_plot = self.layout.addPlot()
             new_plot.plot(np.zeros(250))
             self.set_options(new_plot, self.kwargs)
-            self.plot_list.append(new_plot.listDataItems()[0])
+            self.plot_list.append(new_plot)
             self.layout.nextRow()
 
     def update(self):
         stream_data = self.read_stream()
 
         for data, line in zip(stream_data, self.plot_list):
+            line = line.listDataItems()[0]
+
             yData = line.yData
             yData[-1] = data
 
@@ -89,11 +100,24 @@ class BasePlot(object):
     def start(self):
         self.open_stream()
         self.plot_init()
-        timer = QtCore.QTimer()
-        timer.timeout.connect(self.update)
-        timer.start(0)
+
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.update)
+        self.timer.start(0)
+
         if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
             self.app.exec_()
+
+    def stop_and_run(self):
+        if self.timer.isActive():
+            self.timer.stop()
+        else:
+            self.stream.flushInput() # Descarto todo el contenido acumulado
+            self.timer.start()
+
+    def handle_close_event(self, event):
+        self.close_stream()
+        self.app.exit()
 
 class SerialPlot(BasePlot):
     def __init__(self, com_port, baud_rate, **kwargs):
