@@ -25,6 +25,11 @@ class BasePlot(object):
         self.plot_list = []
 
         self.timer = None
+        self.samples = 500
+        self.inverted = False
+
+    def get_samples(self):
+        return self.samples
 
     def set_options(self, plot, kwargs):
         if "xlim" in kwargs.keys():
@@ -42,10 +47,14 @@ class BasePlot(object):
         self.stream.open()
 
     def close_stream(self):
-        if hasattr(self.stream, 'flushInput'):
-            self.stream.flushInput()
-        if hasattr(self.stream, 'flushOutput'):
-            self.stream.flushOutput()
+        try:
+            if hasattr(self.stream, 'flushInput'):
+                self.stream.flushInput()
+            if hasattr(self.stream, 'flushOutput'):
+                self.stream.flushOutput()
+        except serial.serialutil.PortNotOpenError as e:
+            print(e)
+
         self.stream.close()
         print("Stream closed")
 
@@ -65,13 +74,32 @@ class BasePlot(object):
         for plot in self.plot_list:
             plot.setXRange(0, band)
 
+    def autorange(self):
+        for plot in self.plot_list:
+            plot.autoRange()
+
+    def invert_Y(self):
+        self.inverted = not self.inverted
+
+        for plot in self.plot_list:
+            plot.invertY(self.inverted)
+
+    def on_mode_change(self, text):
+        if text == "Simple":
+            pass
+        elif text == "A+B":
+            pass
+        elif text == "A-B":
+            pass
+        else:
+            pass
+
     def plot_init(self):
-        for i in range(20):
-            trial_data = self.read_stream()
+        trial_data = self.read_stream()
 
         for i in range(len(trial_data)):
             new_plot = self.layout.addPlot()
-            new_plot.plot(np.zeros(250))
+            new_plot.plot(np.zeros(self.samples))
             self.set_options(new_plot, self.kwargs)
             self.plot_list.append(new_plot)
             self.layout.nextRow()
@@ -103,7 +131,7 @@ class BasePlot(object):
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update)
-        self.timer.start(0)
+        self.timer.start(1 / self.samples)
 
         if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
             self.app.exec_()
@@ -115,7 +143,10 @@ class BasePlot(object):
             self.stream.flushInput() # Descarto todo el contenido acumulado
             self.timer.start()
 
-    def handle_close_event(self, event):
+    def close(self):
+        self.handle_close_event()
+
+    def handle_close_event(self, event=None):
         self.close_stream()
         self.app.exit()
 
