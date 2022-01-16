@@ -109,12 +109,17 @@ class BasePlot(object):
         for plot in plot_list:
             plot.showGrid(True, True)
 
+    def mouse_clicked(self, event):
+        point = event.pos()
+        plot = self.plot_list[0]
+
     def plot_init(self):
         trial_data = self.read_stream()
 
         for i in range(len(trial_data)):
             new_plot = self.layout.addPlot()
             new_plot.plot(np.zeros(self.samples))
+            new_plot.scene().sigMouseClicked.connect(self.mouse_clicked)
             self.set_options(
                 new_plot,
                 **self.kwargs,
@@ -168,6 +173,7 @@ class BasePlot(object):
         self.handle_close_event()
 
     def handle_close_event(self, event=None):
+        self.timer.stop()
         self.close_stream()
         self.app.exit()
 
@@ -177,27 +183,3 @@ class SerialPlot(BasePlot):
         self.serial_port.baudrate = baud_rate
         self.serial_port.port = com_port
         super(SerialPlot, self).__init__(self.serial_port, **kwargs)
-
-class SocketClientPlot(BasePlot):
-    def __init__(self, address, port, **kwargs):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket_params = (address, port)
-        self.socket.connect((address, port))
-        self.stream = self.socket.makefile()
-        super(SocketClientPlot, self).__init__(self.stream, **kwargs)
-
-    def open_stream(self):
-        pass
-
-    def close_stream(self):
-        self.socket.close()
-        self.stream.close()
-
-class GenericPlot(BasePlot):
-    def __init__(self, stream, **kwargs):
-        if hasattr(stream, 'open') \
-        and hasattr(stream, 'close') \
-        and hasattr(stream, 'readline'):
-            super(GenericPlot, self).__init__(stream, **kwargs)
-        else:
-            raise BadAttributeError("One of the open/close/readline attributes is missing")
