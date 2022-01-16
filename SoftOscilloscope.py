@@ -31,16 +31,27 @@ class BasePlot(object):
     def get_samples(self):
         return self.samples
 
-    def set_options(self, plot, kwargs):
-        if "xlim" in kwargs.keys():
+    def set_options(self, plot, **kwargs):
+        options = kwargs.keys()
+
+        if "xlim" in options:
             self.change_amplitude(kwargs["xlim"])
         else:
             self.change_amplitude(1.25)
 
-        if "ylim" in kwargs.keys():
+        if "ylim" in options:
             self.change_time(kwargs["ylim"])
         else:
             self.change_time(1.25)
+
+        if "setMouseEnabled" in options:
+            plot.setMouseEnabled(True, True)
+
+        if "hideButtons" in options:
+            plot.hideButtons()
+
+        if "setMenuEnabled" in options:
+            plot.setMenuEnabled()
 
     def open_stream(self):
         print("Opening Stream")
@@ -94,13 +105,23 @@ class BasePlot(object):
         else:
             pass
 
+    def show_grid(self):
+        for plot in plot_list:
+            plot.showGrid(True, True)
+
     def plot_init(self):
         trial_data = self.read_stream()
 
         for i in range(len(trial_data)):
             new_plot = self.layout.addPlot()
             new_plot.plot(np.zeros(self.samples))
-            self.set_options(new_plot, self.kwargs)
+            self.set_options(
+                new_plot,
+                **self.kwargs,
+                setMouseEnabled=True,
+                setMenuEnabled=True,
+                hideButtons=True
+            )
             self.plot_list.append(new_plot)
             self.layout.nextRow()
 
