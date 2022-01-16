@@ -14,19 +14,19 @@ class BasePlot(object):
         except RuntimeError:
             self.app = QtGui.QApplication.instance()
 
-        self.view = pg.GraphicsView()
-        self.layout = pg.GraphicsLayout(border=(100,100,100))
-        self.view.closeEvent = self.handle_close_event
+        self.layout = pg.GraphicsWindow()
+        self.layout.showMaximized()
+        self.layout.setWindowTitle('Software Oscilloscope')
         self.layout.closeEvent = self.handle_close_event
-        self.view.setCentralItem(self.layout)
-        self.view.show()
-        self.view.setWindowTitle('Software Oscilloscope')
-        self.view.showMaximized()
-        self.plot_list = []
+        self.plot_list = list()
+        self.scatter_plot_list = list()
 
         self.timer = None
         self.samples = 500
         self.inverted = False
+
+    def _translate_range(self, value, in_min, in_max, out_min, out_max):
+        return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
     def get_samples(self):
         return self.samples
@@ -70,10 +70,7 @@ class BasePlot(object):
         print("Stream closed")
 
     def read_stream(self):
-        try:
-            stream_data = self.stream.readline().rstrip().split(',')
-        except TypeError:
-            stream_data = self.stream.readline().decode('utf-8').rstrip().split(',')
+        stream_data = self.stream.readline().decode('utf-8').rstrip().split(',')
 
         return stream_data
 
@@ -112,6 +109,22 @@ class BasePlot(object):
     def mouse_clicked(self, event):
         point = event.pos()
         plot = self.plot_list[0]
+
+        x_range = plot.getAxis('bottom').range
+        y_range = plot.getAxis('left').range
+        widget_width = plot.getAxis('bottom').size().width()
+        widget_height = plot.getAxis('left').size().height()
+        new_x = self._translate_range(point.x(), 0, widget_width, x_range[0], x_range[1])
+        new_y = self._translate_range(point.y(), widget_height, 0, y_range[0], y_range[1])
+
+        scatterplot = pg.ScatterPlotItem([new_x], [new_y], symbol='+', color = 'b')
+        self.scatter_plot_list.append(scatterplot)
+        plot.addItem(scatterplot)
+
+    def delete_all(self):
+        for plot in self.plot_list:
+            for item in self.scatter_plot_list:
+                plot.removeItem(item)
 
     def plot_init(self):
         trial_data = self.read_stream()
