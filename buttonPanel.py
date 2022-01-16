@@ -8,10 +8,10 @@ class ButtonPanel(QWidget):
     def __init__(self, plotWidget):
         super().__init__()
         self.title = 'Oscilloscope Tools'
-        self.left = 10
-        self.top = 10
-        self.width = 320
-        self.height = 200
+        self.left = 100
+        self.top = 100
+        self.width = 500
+        self.height = 500
         self.offset_amplitude = 50
         self.offset_time = 50
         self.plotWidget = plotWidget
@@ -50,9 +50,11 @@ class ButtonPanel(QWidget):
         self.addDial(10, 50, 1, 250, self.change_amplitude)
         self.addDial(100, 50, 1, self.plotWidget.get_samples(), self.change_time)
         # Dials
-        self.addComboBox(280, 10, ["Simple", "A+B", "A-B"], self.on_mode_change)
+        self.addComboBox(280, 50, ["Simple", "A+B", "A-B"], self.on_mode_change)
 
         self.show()
+
+    # Buttons Callbacks
 
     @pyqtSlot()
     def stop_and_run(self):
@@ -62,6 +64,12 @@ class ButtonPanel(QWidget):
     def autorange(self):
         self.plotWidget.autorange()
 
+    @pyqtSlot()
+    def invert_Y(self):
+        self.plotWidget.invert_Y()
+
+    # Dials Callbacks
+
     def change_amplitude(self, value):
         self.plotWidget.change_amplitude(value / 100)
         # Lo divido por 100 porque el rango va de 0 a 250 
@@ -69,14 +77,16 @@ class ButtonPanel(QWidget):
     def change_time(self, value):
         self.plotWidget.change_time(value)
 
-    def invert_Y(self):
-        self.plotWidget.invert_Y()
+    # ComboBoxes Callbacks
 
     def on_mode_change(self, text):
         self.plotWidget.on_mode_change(text)
 
+    # Others Events
+
     def closeEvent(self, event):
         event.accept()
+        self.plotWidget.close()
         # reply = QMessageBox.question(self, '¿Cerrar ventana?', '¿Está seguro que quiere cerrar la ventana?',
         #         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
