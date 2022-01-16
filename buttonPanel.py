@@ -46,6 +46,7 @@ class ButtonPanel(QWidget):
         self.addButton('Stop/Run', 'Este boton frena o corre la medicion', 10, 10, self.stop_and_run)
         self.addButton('AutoRange', 'Ajusta automaticamente los parametros para la señal de entrada', 100, 10, self.autorange)
         self.addButton('Invertir Y', 'Invierte para todas las graficas el eje Y', 190, 10, self.invert_Y)
+        self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', 280, 10, self.delete_all)
         # Button Panels
         self.addDial(10, 50, 1, 250, self.change_amplitude)
         self.addDial(100, 50, 1, self.plotWidget.get_samples(), self.change_time)
@@ -67,6 +68,10 @@ class ButtonPanel(QWidget):
     @pyqtSlot()
     def invert_Y(self):
         self.plotWidget.invert_Y()
+
+    @pyqtSlot()
+    def delete_all(self):
+        self.plotWidget.delete_all()
 
     # Dials Callbacks
 
