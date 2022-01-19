@@ -24,6 +24,10 @@ class BasePlot(object):
         self.timer = None
         self.samples = 500
         self.inverted = False
+        self.pointsSize = 7
+        self.curve_width_sensibility = 10
+        self.fft_mode = False
+        self.SAVE_RESPONSE = 20
 
     def _translate_range(self, value, in_min, in_max, out_min, out_max):
         return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -53,6 +57,11 @@ class BasePlot(object):
         if "setMenuEnabled" in options:
             plot.setMenuEnabled()
 
+        if "curveClickable" in options:
+            curve = plot.listDataItems()[0]
+            curve.setCurveClickable(True, self.curve_width_sensibility)
+            curve.sigClicked.connect(self.curve_clicked)
+
     def open_stream(self):
         print("Opening Stream")
         self.stream.open()
@@ -73,6 +82,9 @@ class BasePlot(object):
         stream_data = self.stream.readline().decode('utf-8').rstrip().split(',')
 
         return stream_data
+
+    def write_stream(self, text):
+        self.stream.write(text)
 
     def change_amplitude(self, band):
         for plot in self.plot_list:
@@ -106,39 +118,80 @@ class BasePlot(object):
         for plot in plot_list:
             plot.showGrid(True, True)
 
-    def mouse_clicked(self, event):
+    def mouse_clicked(self, event, plot):
+        if event.button() != QtCore.Qt.LeftButton:
+            event.ignore()
+            return
+        # Solo responde al click izquierdo
+
         point = event.pos()
-        plot = self.plot_list[0]
 
         x_range = plot.getAxis('bottom').range
         y_range = plot.getAxis('left').range
+        # Valores limites de los ejes
         widget_width = plot.getAxis('bottom').size().width()
         widget_height = plot.getAxis('left').size().height()
+        # Ancho y alto del widget del plot
         new_x = self._translate_range(point.x(), 0, widget_width, x_range[0], x_range[1])
         new_y = self._translate_range(point.y(), widget_height, 0, y_range[0], y_range[1])
+        # Valores equivalentes de x e y entre los ejes y las dimensiones
 
-        scatterplot = pg.ScatterPlotItem([new_x], [new_y], symbol='+', color = 'b')
+        scatterplot = pg.ScatterPlotItem([new_x], [new_y], symbol='s', brush=pg.intColor(0), size=self.pointsSize)
+        # 's' symbol is a square
         self.scatter_plot_list.append(scatterplot)
         plot.addItem(scatterplot)
+
+    def up_plot_callback(self, event):
+        plot = self.plot_list[0]
+        self.mouse_clicked(event, plot)
+
+    def down_plot_callback(self, event):
+        plot = self.plot_list[1]
+        self.mouse_clicked(event, plot)
+
+    def add_text(self):
+        text_item = pg.TextItem("hola")
+        plot = self.plot_list[0]
+
+        plot.addItem(text_item)
 
     def delete_all(self):
         for plot in self.plot_list:
             for item in self.scatter_plot_list:
                 plot.removeItem(item)
 
+    def apply_fft(self):
+        self.fft_mode = not self.fft_mode
+
+        for plot in self.plot_list:
+            curve = plot.listDataItems()[0]
+            curve.setFftMode(self.fft_mode)
+
+    def curve_clicked(self, event):
+        pass
+
     def plot_init(self):
+        functions_callback = [self.up_plot_callback, self.down_plot_callback]
+
+        for i in range(self.SAVE_RESPONSE):
+            self.read_stream()
+        # Descarta una cierta cantidad de muestras
+        # para asegurar que los primeros datos no 
+        # influyan en la lectura
+
         trial_data = self.read_stream()
 
         for i in range(len(trial_data)):
             new_plot = self.layout.addPlot()
             new_plot.plot(np.zeros(self.samples))
-            new_plot.scene().sigMouseClicked.connect(self.mouse_clicked)
+            new_plot.scene().sigMouseClicked.connect(functions_callback[i])
             self.set_options(
                 new_plot,
                 **self.kwargs,
                 setMouseEnabled=True,
                 setMenuEnabled=True,
-                hideButtons=True
+                hideButtons=True,
+                curveClickable=True
             )
             self.plot_list.append(new_plot)
             self.layout.nextRow()
