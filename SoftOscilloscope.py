@@ -3,6 +3,7 @@ from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph as pg
 import numpy as np
 import signal
+import time
 
 class BasePlot(object):
     def __init__(self, stream, **kwargs):
@@ -18,16 +19,24 @@ class BasePlot(object):
         self.layout.showMaximized()
         self.layout.setWindowTitle('Software Oscilloscope')
         self.layout.closeEvent = self.handle_close_event
-        self.plot_list = list()
         self.scatter_plot_list = list()
+        self.plots = dict()
 
-        self.timer = None
+        self.SAVE_RESPONSE = 20
+        self.SIMPLE = 0
+        self.A_PLUS_B = 1
+        self.A_MINUS_B = 2
+
+        self.timer = None # Para parar el muestreo
         self.samples = 500
         self.inverted = False
         self.pointsSize = 7
         self.curve_width_sensibility = 10
         self.fft_mode = False
-        self.SAVE_RESPONSE = 20
+        self.grid = False
+        self.last_point = None
+        self.point_color_index = 0
+        self.mode = self.SIMPLE
 
     def _translate_range(self, value, in_min, in_max, out_min, out_max):
         return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
@@ -57,10 +66,14 @@ class BasePlot(object):
         if "setMenuEnabled" in options:
             plot.setMenuEnabled()
 
+        if "showGrid" in options:
+            self.toggle_grid(plot)
+
         if "curveClickable" in options:
-            curve = plot.listDataItems()[0]
-            curve.setCurveClickable(True, self.curve_width_sensibility)
-            curve.sigClicked.connect(self.curve_clicked)
+            plotDataItems = plot.listDataItems()[0]
+            # scatterDataItems = plot.listDataItems()[2]
+            plotDataItems.setCurveClickable(True, self.curve_width_sensibility)
+            plotDataItems.sigClicked.connect(self.curve_clicked)
 
     def open_stream(self):
         print("Opening Stream")
@@ -87,92 +100,107 @@ class BasePlot(object):
         self.stream.write(text)
 
     def change_amplitude(self, band):
-        for plot in self.plot_list:
+        for plot in self.plots.values():
             plot.setYRange(-band / 2, band / 2)
 
     def change_time(self, band):
-        for plot in self.plot_list:
+        for plot in self.plots.values():
             plot.setXRange(0, band)
 
     def autorange(self):
-        for plot in self.plot_list:
+        for plot in self.plots.values():
             plot.autoRange()
 
     def invert_Y(self):
         self.inverted = not self.inverted
 
-        for plot in self.plot_list:
+        for plot in self.plots.values():
             plot.invertY(self.inverted)
 
     def on_mode_change(self, text):
         if text == "Simple":
-            pass
+            self.mode = self.SIMPLE
         elif text == "A+B":
-            pass
+            self.mode = self.A_PLUS_B
         elif text == "A-B":
-            pass
+            self.mode = self.A_MINUS_B
         else:
-            pass
+            print("Fallo widget de seleccion de modo")
 
-    def show_grid(self):
-        for plot in plot_list:
-            plot.showGrid(True, True)
+    def toggle_grid(self, plot=None):
+        self.grid = not self.grid
 
-    def mouse_clicked(self, event, plot):
-        if event.button() != QtCore.Qt.LeftButton:
-            event.ignore()
-            return
-        # Solo responde al click izquierdo
-
-        point = event.pos()
-
-        x_range = plot.getAxis('bottom').range
-        y_range = plot.getAxis('left').range
-        # Valores limites de los ejes
-        widget_width = plot.getAxis('bottom').size().width()
-        widget_height = plot.getAxis('left').size().height()
-        # Ancho y alto del widget del plot
-        new_x = self._translate_range(point.x(), 0, widget_width, x_range[0], x_range[1])
-        new_y = self._translate_range(point.y(), widget_height, 0, y_range[0], y_range[1])
-        # Valores equivalentes de x e y entre los ejes y las dimensiones
-
-        scatterplot = pg.ScatterPlotItem([new_x], [new_y], symbol='s', brush=pg.intColor(0), size=self.pointsSize)
-        # 's' symbol is a square
-        self.scatter_plot_list.append(scatterplot)
-        plot.addItem(scatterplot)
-
-    def up_plot_callback(self, event):
-        plot = self.plot_list[0]
-        self.mouse_clicked(event, plot)
-
-    def down_plot_callback(self, event):
-        plot = self.plot_list[1]
-        self.mouse_clicked(event, plot)
-
-    def add_text(self):
-        text_item = pg.TextItem("hola")
-        plot = self.plot_list[0]
-
-        plot.addItem(text_item)
+        for plot in self.plots.values():
+            if self.grid:
+                plot.showGrid(self.grid, self.grid)
 
     def delete_all(self):
-        for plot in self.plot_list:
+        for plot in self.plots.values():
             for item in self.scatter_plot_list:
                 plot.removeItem(item)
 
     def apply_fft(self):
         self.fft_mode = not self.fft_mode
 
-        for plot in self.plot_list:
+        for plot in self.plots.values():
             curve = plot.listDataItems()[0]
             curve.setFftMode(self.fft_mode)
 
+    def get_plot_info(self, plot):
+        geo = plot.viewGeometry()
+
+        bottom = plot.getAxis('bottom')
+        left = plot.getAxis('left')
+
+        new_dict = {
+            "x": bottom.x(),
+            "y": left.y(),
+            "width": bottom.size().width(),
+            "height": left.size().height(),
+            "x_range": bottom.range,
+            "y_range": left.range
+        }
+
+        return new_dict
+
+    def on_plot_click(self, event):
+        point = event.pos()
+
     def curve_clicked(self, event):
-        pass
+        # new_x = point.x()
+        # new_y = point.y()
+        new_x = 0
+        new_y = 0
+
+        name = event.name()
+        plot = self.plots[name]
+        plot_dict = self.get_plot_info(plot)
+
+        x_range = plot_dict['x_range']
+        y_range = plot_dict['y_range']
+        # Valores limites de los ejes
+        widget_width = plot_dict['width']
+        widget_height = plot_dict['height']
+        # Ancho y alto del widget del plot
+        new_x = self._translate_range(new_x, 0, widget_width, x_range[0], x_range[1])
+        new_y = self._translate_range(new_y, widget_height, 0, y_range[0], y_range[1])
+        # Valores equivalentes de x e y entre los ejes y las dimensiones
+
+        new_x = 0.5 * self.point_color_index
+        new_y = 0.5
+
+        print(f"Nuevo punto: {new_x}, {new_y}")
+
+        self.point_color_index = (self.point_color_index + 1) % 10
+        scatterplot = pg.ScatterPlotItem([new_x], [new_y], symbol='s', brush=pg.intColor(self.point_color_index), size=self.pointsSize)
+        # 's' symbol is a square
+        self.scatter_plot_list.append(scatterplot)
+        plot.addItem(scatterplot)
+
+    def points_clicked(self, points, event):
+        print(points)
 
     def plot_init(self):
-        functions_callback = [self.up_plot_callback, self.down_plot_callback]
-
         for i in range(self.SAVE_RESPONSE):
             self.read_stream()
         # Descarta una cierta cantidad de muestras
@@ -183,39 +211,52 @@ class BasePlot(object):
 
         for i in range(len(trial_data)):
             new_plot = self.layout.addPlot()
-            new_plot.plot(np.zeros(self.samples))
-            new_plot.scene().sigMouseClicked.connect(functions_callback[i])
+            new_plot.plot(np.zeros(self.samples), name=f"plot_{i}")
+            new_plot.scene().sigMouseClicked.connect(self.on_plot_click)
             self.set_options(
                 new_plot,
                 **self.kwargs,
                 setMouseEnabled=True,
                 setMenuEnabled=True,
                 hideButtons=True,
-                curveClickable=True
+                curveClickable=True,
+                showGrid=True
             )
-            self.plot_list.append(new_plot)
+            self.plots[f"plot_{i}"] = new_plot
             self.layout.nextRow()
+
+    def update_widget(self, plot, data):
+        plot = plot.listDataItems()[0]
+
+        yData = plot.yData
+        yData[-1] = data
+
+        plot.informViewBoundsChanged()
+        plot.setData(
+            x=np.arange(len(plot.yData)),
+            y=np.roll(yData, -1),
+        )
+        plot.updateItems()
+        plot.sigPlotChanged.emit(plot)
 
     def update(self):
         stream_data = self.read_stream()
 
-        for data, line in zip(stream_data, self.plot_list):
-            line = line.listDataItems()[0]
+        if self.mode == self.SIMPLE:
+            for data, plot in zip(stream_data, self.plots.values()):
+                self.update_widget(plot, data)
 
-            yData = line.yData
-            yData[-1] = data
-
-            line.informViewBoundsChanged()
-            line.setData(
-                x=np.arange(len(line.yData)),
-                y=np.roll(yData, -1),
-                xClean=None,
-                yClean=None,
-                xDisp=None,
-                yDisp=None
+        elif self.mode == self.A_PLUS_B:
+            self.update_widget(
+                list(self.plots.values())[0],
+                str(float(stream_data[0]) + float(stream_data[1]))
             )
-            line.updateItems()
-            line.sigPlotChanged.emit(line)
+
+        elif self.mode == self.A_MINUS_B:
+            self.update_widget(
+                list(self.plots.values())[0],
+                str(float(stream_data[0]) - float(stream_data[1]))
+            )
 
     def start(self):
         self.open_stream()
@@ -248,4 +289,7 @@ class SerialPlot(BasePlot):
         self.serial_port = serial.Serial()
         self.serial_port.baudrate = baud_rate
         self.serial_port.port = com_port
+        self.serial_port.bytesize = serial.EIGHTBITS
+        self.serial_port.parity = serial.PARITY_EVEN
+        self.serial_port.stopbits = serial.STOPBITS_ONE
         super(SerialPlot, self).__init__(self.serial_port, **kwargs)
