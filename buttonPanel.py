@@ -1,5 +1,7 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QDial, QMessageBox, QComboBox
+from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QDial,
+                             QMessageBox, QComboBox, QGroupBox, QVBoxLayout,
+                             QGridLayout)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSlot, Qt
 
@@ -15,46 +17,85 @@ class ButtonPanel(QWidget):
         self.offset_amplitude = 50
         self.offset_time = 50
         self.plotWidget = plotWidget
-        self.initUI()
+        self.init_UI()
         self.plotWidget.start()
 
     def addButton(self, title, tooltip, x, y, function):
         button = QPushButton(title, self)
         button.setToolTip(tooltip)
-        button.move(x, y)
         button.clicked.connect(function)
+
+        return button
 
     def addDial(self, x, y, range_start, range_end, function):
         dial = QDial(self)
-        dial.move(x, y)
         dial.setRange(range_start, range_end)
         dial.setValue((range_end - range_start) / 2)
         # Centers dial
         dial.valueChanged[int].connect(function)
 
+        return dial
+
     def addComboBox(self, x, y, items, function):
         combo = QComboBox(self)
-        combo.move(x, y)
         for item in items:
             combo.addItem(item)
         combo.activated[str].connect(function)
 
-    def initUI(self):
+        return combo
+
+    def addGroupBox(self, title, objects_list):
+        groupBox = QGroupBox(title)
+        vbox = QVBoxLayout()
+
+        for element in objects_list:
+            vbox.addWidget(element)
+
+        groupBox.setLayout(vbox)
+
+        return groupBox
+
+    def init_UI(self):
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
 
-        self.addButton('Stop/Run', 'Este boton frena o corre la medicion', 10, 10, self.stop_and_run)
-        self.addButton('AutoRange', 'Ajusta automaticamente los parametros para la señal de entrada', 100, 10, self.autorange)
-        self.addButton('Invertir Y', 'Invierte para todas las graficas el eje Y', 190, 10, self.invert_Y)
-        self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', 280, 10, self.delete_all)
-        self.addButton('FFT', 'Aplicar FFT en tiempo real', 370, 10, self.apply_fft)
+        components = list()
+
+        components.append(self.addButton('Stop/Run', 'Este boton frena o corre la medicion', 10, 10, self.stop_and_run))
+        components.append(self.addButton('AutoRange', 'Ajusta automaticamente los parametros para la señal de entrada', 100, 10, self.autorange))
         # Button Panels
-        self.addDial(10, 50, 1, 250, self.change_amplitude)
-        self.addDial(100, 50, 1, self.plotWidget.get_samples(), self.change_time)
+        components.append(self.addComboBox(280, 50, ["Simple", "A+B", "A-B"], self.on_mode_change))
+        # ComboBoxes
+        components.append(self.addDial(100, 50, 1, self.plotWidget.get_samples(), self.change_time))
         # Dials
-        self.addComboBox(280, 50, ["Simple", "A+B", "A-B"], self.on_mode_change)
+
+        main_group = self.addGroupBox("Controles comunes", components)
+
+        # Controles globales
+
+        group2 = self.add_panel("Canal A")
+
+        grid = QGridLayout()
+        grid.addWidget(main_group, 0, 0)
+        grid.addWidget(group2, 0, 1)
+        self.setLayout(grid)
 
         self.show()
+
+    def add_panel(self, title):
+        """
+        Se agregan un conjunto de controles (panel) por canal.
+        """
+        components = list()
+        components.append(self.addButton('Invertir Y', 'Invierte para todas las graficas el eje Y', 190, 10, self.invert_Y))
+        components.append(self.addButton('Grilla', 'Muestra u oculta la grilla', 280, 10, self.toggle_grid))
+        components.append(self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', 370, 10, self.delete_all))
+        components.append(self.addButton('FFT', 'Aplicar FFT en tiempo real', 460, 10, self.apply_fft))
+        # Button Panels
+        components.append(self.addDial(10, 50, 1, 250, self.change_amplitude))
+        # Dials
+
+        return self.addGroupBox(title, [invert_button, grid_button, delete_button, fft_button, amp_dial])
 
     # Buttons Callbacks
 
@@ -69,6 +110,10 @@ class ButtonPanel(QWidget):
     @pyqtSlot()
     def invert_Y(self):
         self.plotWidget.invert_Y()
+
+    @pyqtSlot()
+    def toggle_grid(self):
+        self.plotWidget.toggle_grid()
 
     @pyqtSlot()
     def delete_all(self):
