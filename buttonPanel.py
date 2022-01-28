@@ -20,14 +20,14 @@ class ButtonPanel(QWidget):
         self.init_UI()
         self.plotWidget.start()
 
-    def addButton(self, title, tooltip, x, y, function):
+    def addButton(self, title, tooltip, function):
         button = QPushButton(title, self)
         button.setToolTip(tooltip)
         button.clicked.connect(function)
 
         return button
 
-    def addDial(self, x, y, range_start, range_end, function):
+    def addDial(self, range_start, range_end, function):
         dial = QDial(self)
         dial.setRange(range_start, range_end)
         dial.setValue((range_end - range_start) / 2)
@@ -36,7 +36,7 @@ class ButtonPanel(QWidget):
 
         return dial
 
-    def addComboBox(self, x, y, items, function):
+    def addComboBox(self, items, function):
         combo = QComboBox(self)
         for item in items:
             combo.addItem(item)
@@ -61,12 +61,12 @@ class ButtonPanel(QWidget):
 
         components = list()
 
-        components.append(self.addButton('Stop/Run', 'Este boton frena o corre la medicion', 10, 10, self.stop_and_run))
-        components.append(self.addButton('AutoRange', 'Ajusta automaticamente los parametros para la señal de entrada', 100, 10, self.autorange))
+        components.append(self.addButton('Stop/Run', 'Este boton frena o corre la medicion', self.stop_and_run))
+        components.append(self.addButton('AutoRange', 'Ajusta automaticamente los parametros para la señal de entrada', self.autorange))
         # Button Panels
-        components.append(self.addComboBox(280, 50, ["Simple", "A+B", "A-B"], self.on_mode_change))
+        components.append(self.addComboBox(["Simple", "A+B", "A-B"], self.on_mode_change))
         # ComboBoxes
-        components.append(self.addDial(100, 50, 1, self.plotWidget.get_samples(), self.change_time))
+        components.append(self.addDial(1, self.plotWidget.get_samples(), self.change_time))
         # Dials
 
         main_group = self.addGroupBox("Controles comunes", components)
@@ -87,15 +87,15 @@ class ButtonPanel(QWidget):
         Se agregan un conjunto de controles (panel) por canal.
         """
         components = list()
-        components.append(self.addButton('Invertir Y', 'Invierte para todas las graficas el eje Y', 190, 10, self.invert_Y))
-        components.append(self.addButton('Grilla', 'Muestra u oculta la grilla', 280, 10, self.toggle_grid))
-        components.append(self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', 370, 10, self.delete_all))
-        components.append(self.addButton('FFT', 'Aplicar FFT en tiempo real', 460, 10, self.apply_fft))
+        components.append(self.addButton('Invertir Y', 'Invierte para todas las graficas el eje Y', self.invert_Y))
+        components.append(self.addButton('Grilla', 'Muestra u oculta la grilla', self.toggle_grid))
+        components.append(self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', self.delete_all))
+        components.append(self.addButton('FFT', 'Aplicar FFT en tiempo real', self.apply_fft))
         # Button Panels
-        components.append(self.addDial(10, 50, 1, 250, self.change_amplitude))
+        components.append(self.addDial(1, 250, self.change_amplitude))
         # Dials
 
-        return self.addGroupBox(title, [invert_button, grid_button, delete_button, fft_button, amp_dial])
+        return self.addGroupBox(title, components)
 
     # Buttons Callbacks
 
