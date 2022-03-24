@@ -2,23 +2,17 @@ import serial, socket, sys
 from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph as pg
 import numpy as np
-import signal
-import time
 
 class BasePlot(object):
-    def __init__(self, stream, **kwargs):
+    def __init__(self, app, stream, **kwargs):
+        self.app = app
         self.stream = stream
         self.kwargs = kwargs
 
-        try:
-            self.app = QtGui.QApplication([])
-        except RuntimeError:
-            self.app = QtGui.QApplication.instance()
-
-        self.layout = pg.GraphicsWindow()
+        self.layout = pg.GraphicsLayoutWidget()
         self.layout.showMaximized()
         self.layout.setWindowTitle('Software Oscilloscope')
-        self.layout.closeEvent = self.handle_close_event
+        self.layout.closeEvent = self.close
         self.scatter_plot_list = list()
         self.plots = dict()
 
@@ -26,6 +20,8 @@ class BasePlot(object):
         self.SIMPLE = 0
         self.A_PLUS_B = 1
         self.A_MINUS_B = 2
+        self.A_X_B = 3
+        self.A_DIV_B = 4
 
         self.timer = None # Para parar el muestreo
         self.samples = 500
@@ -47,15 +43,15 @@ class BasePlot(object):
     def set_options(self, plot, **kwargs):
         options = kwargs.keys()
 
-        if "xlim" in options:
-            self.change_amplitude(kwargs["xlim"])
-        else:
-            self.change_amplitude(1.25)
+        # if "xlim" in options:
+        #     self.change_amplitude(kwargs["xlim"])
+        # else:
+        #     self.change_amplitude(1.25)
 
-        if "ylim" in options:
-            self.change_time(kwargs["ylim"])
-        else:
-            self.change_time(1.25)
+        # if "ylim" in options:
+        #     self.change_time(kwargs["ylim"])
+        # else:
+        #     self.change_time(1.25)
 
         if "setMouseEnabled" in options:
             plot.setMouseEnabled(True, True)
@@ -67,7 +63,7 @@ class BasePlot(object):
             plot.setMenuEnabled()
 
         if "showGrid" in options:
-            self.toggle_grid(plot)
+            self.toggle_grid(list(self.plots.values()).index(plot))
 
         if "curveClickable" in options:
             plotDataItems = plot.listDataItems()[0]
@@ -91,17 +87,27 @@ class BasePlot(object):
         self.stream.close()
         print("Stream closed")
 
+    def validate(self, data):
+        return data
+
+    def decode(self, data):
+        return data
+
     def read_stream(self):
         stream_data = self.stream.readline().decode('utf-8').rstrip().split(',')
+        # TODO: Confirmar la informacion recibida
+
+        stream_data = self.validate(stream_data)
+        stream_data = self.decode(stream_data)
 
         return stream_data
 
     def write_stream(self, text):
         self.stream.write(text)
 
-    def change_amplitude(self, band):
-        for plot in self.plots.values():
-            plot.setYRange(-band / 2, band / 2)
+    def change_amplitude(self, index, band):
+        plot = list(self.plots.values())[index]
+        plot.setYRange(-band / 2, band / 2)
 
     def change_time(self, band):
         for plot in self.plots.values():
@@ -111,33 +117,36 @@ class BasePlot(object):
         for plot in self.plots.values():
             plot.autoRange()
 
-    def invert_Y(self):
+    def invert_Y(self, index):
         self.inverted = not self.inverted
 
-        for plot in self.plots.values():
-            plot.invertY(self.inverted)
+        plot = list(self.plots.values())[index]
+        plot.invertY(self.inverted)
 
     def on_mode_change(self, text):
         if text == "Simple":
             self.mode = self.SIMPLE
-        elif text == "A+B":
+        elif text == "A + B":
             self.mode = self.A_PLUS_B
-        elif text == "A-B":
+        elif text == "A - B":
             self.mode = self.A_MINUS_B
+        elif text == "A * B":
+            self.mode = self.A_X_B
+        elif text == "A / B":
+            self.mode = self.A_DIV_B
         else:
             print("Fallo widget de seleccion de modo")
 
-    def toggle_grid(self, plot=None):
+    def toggle_grid(self, index):
         self.grid = not self.grid
 
-        for plot in self.plots.values():
-            if self.grid:
-                plot.showGrid(self.grid, self.grid)
+        plot = list(self.plots.values())[index]
+        plot.showGrid(self.grid, self.grid)
 
-    def delete_all(self):
-        for plot in self.plots.values():
-            for item in self.scatter_plot_list:
-                plot.removeItem(item)
+    def delete_all(self, index):
+        plot = list(self.plots.values())[index]
+        for item in self.scatter_plot_list[index]:
+            plot.removeItem(item)
 
     def apply_fft(self):
         self.fft_mode = not self.fft_mode
@@ -174,7 +183,13 @@ class BasePlot(object):
 
         name = event.name()
         plot = self.plots[name]
+        plot_index = list(self.plots.keys()).index(name)
         plot_dict = self.get_plot_info(plot)
+
+        items = plot.scene().items(event.scenePos())
+        # mousePoint = plot.vb.mapSceneToView(event._scenePos)
+        for i in range(7):
+            print(items[7].scene().pos())
 
         x_range = plot_dict['x_range']
         y_range = plot_dict['y_range']
@@ -189,12 +204,10 @@ class BasePlot(object):
         new_x = 0.5 * self.point_color_index
         new_y = 0.5
 
-        print(f"Nuevo punto: {new_x}, {new_y}")
-
         self.point_color_index = (self.point_color_index + 1) % 10
         scatterplot = pg.ScatterPlotItem([new_x], [new_y], symbol='s', brush=pg.intColor(self.point_color_index), size=self.pointsSize)
         # 's' symbol is a square
-        self.scatter_plot_list.append(scatterplot)
+        self.scatter_plot_list[plot_index].append(scatterplot)
         plot.addItem(scatterplot)
 
     def points_clicked(self, points, event):
@@ -210,9 +223,10 @@ class BasePlot(object):
         trial_data = self.read_stream()
 
         for i in range(len(trial_data)):
-            new_plot = self.layout.addPlot()
+            self.plots[f"plot_{i}"] = self.layout.addPlot()
+            new_plot = self.plots[f"plot_{i}"]
             new_plot.plot(np.zeros(self.samples), name=f"plot_{i}")
-            new_plot.scene().sigMouseClicked.connect(self.on_plot_click)
+            # new_plot.scene().sigMouseClicked.connect(self.on_plot_click)
             self.set_options(
                 new_plot,
                 **self.kwargs,
@@ -222,8 +236,8 @@ class BasePlot(object):
                 curveClickable=True,
                 showGrid=True
             )
-            self.plots[f"plot_{i}"] = new_plot
             self.layout.nextRow()
+            self.scatter_plot_list.append(list())
 
     def update_widget(self, plot, data):
         plot = plot.listDataItems()[0]
@@ -258,6 +272,21 @@ class BasePlot(object):
                 str(float(stream_data[0]) - float(stream_data[1]))
             )
 
+        elif self.mode == self.A_X_B:
+            self.update_widget(
+                list(self.plots.values())[0],
+                str(float(stream_data[0]) * float(stream_data[1]))
+            )
+
+        elif self.mode == self.A_DIV_B:
+            self.update_widget(
+                list(self.plots.values())[0],
+                str(float(stream_data[0]) / float(stream_data[1]))
+            )
+
+        else:
+            pass
+
     def start(self):
         self.open_stream()
         self.plot_init()
@@ -276,20 +305,17 @@ class BasePlot(object):
             self.stream.flushInput() # Descarto todo el contenido acumulado
             self.timer.start()
 
-    def close(self):
-        self.handle_close_event()
-
-    def handle_close_event(self, event=None):
+    def close(self, event=None):
         self.timer.stop()
         self.close_stream()
         self.app.exit()
 
 class SerialPlot(BasePlot):
-    def __init__(self, com_port, baud_rate, **kwargs):
+    def __init__(self, app, com_port, baud_rate, **kwargs):
         self.serial_port = serial.Serial()
         self.serial_port.baudrate = baud_rate
         self.serial_port.port = com_port
         self.serial_port.bytesize = serial.EIGHTBITS
         self.serial_port.parity = serial.PARITY_EVEN
         self.serial_port.stopbits = serial.STOPBITS_ONE
-        super(SerialPlot, self).__init__(self.serial_port, **kwargs)
+        super(SerialPlot, self).__init__(app, self.serial_port, **kwargs)
