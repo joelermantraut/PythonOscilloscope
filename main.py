@@ -6,10 +6,11 @@ from PyQt5.QtWidgets import QApplication
 import sys
 
 def main():
-    plot = SerialPlot('COM4', 500000)
-
     app = QApplication(sys.argv)
+
+    plot = SerialPlot(app, 'COM4', 500000)
     buttonPanel = ButtonPanel(plot)
+
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
