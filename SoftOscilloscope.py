@@ -30,12 +30,20 @@ class BasePlot(object):
         self.curve_width_sensibility = 10
         self.fft_mode = False
         self.grid = False
-        self.last_point = None
+        self.last_name = ""
         self.point_color_index = 0
+        self.limit_scatter_points = 10
         self.mode = self.SIMPLE
+        self.tolerance = 1
 
     def _translate_range(self, value, in_min, in_max, out_min, out_max):
         return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+    def _range_compare(self, value1, value2, tol=self.tolerance):
+        if abs(value1 - value2) > tol:
+            return False
+        else:
+            return True
 
     def get_samples(self):
         return self.samples
@@ -172,46 +180,55 @@ class BasePlot(object):
 
         return new_dict
 
+    def verify_point_click(self, plot_index, x, y):
+        for point in self.scatter_plot_list[plot_index]:
+            coords = point.getData()
+            point_x = coords[0][0]
+            point_y = coords[1][0]
+
+            if x == point_x and y == point_y:
+                return True
+
+        return False
+
     def on_plot_click(self, event):
+        if self.last_name == "":
+            return
+        name = self.last_name
+        self.last_name = ""
+
         point = event.pos()
+        new_x = point.x()
+        new_y = point.y()
+        # Obtiene el punto clickeado
 
-    def curve_clicked(self, event):
-        # new_x = point.x()
-        # new_y = point.y()
-        new_x = 0
-        new_y = 0
-
-        name = event.name()
         plot = self.plots[name]
         plot_index = list(self.plots.keys()).index(name)
         plot_dict = self.get_plot_info(plot)
+        # Obtiene informacion de la grafica clickeada
 
-        items = plot.scene().items(event.scenePos())
-        # mousePoint = plot.vb.mapSceneToView(event._scenePos)
-        for i in range(7):
-            print(items[7].scene().pos())
+        if self.verify_point_click(plot_index, new_x, new_y):
+            return
 
-        x_range = plot_dict['x_range']
-        y_range = plot_dict['y_range']
-        # Valores limites de los ejes
-        widget_width = plot_dict['width']
-        widget_height = plot_dict['height']
-        # Ancho y alto del widget del plot
-        new_x = self._translate_range(new_x, 0, widget_width, x_range[0], x_range[1])
-        new_y = self._translate_range(new_y, widget_height, 0, y_range[0], y_range[1])
-        # Valores equivalentes de x e y entre los ejes y las dimensiones
+        if len(self.scatter_plot_list[plot_index]) > self.limit_scatter_points:
+            return
+        # Evita que se sigan agregando puntos si ya hay demasiados
 
-        new_x = 0.5 * self.point_color_index
-        new_y = 0.5
-
-        self.point_color_index = (self.point_color_index + 1) % 10
-        scatterplot = pg.ScatterPlotItem([new_x], [new_y], symbol='s', brush=pg.intColor(self.point_color_index), size=self.pointsSize)
-        # 's' symbol is a square
+        self.point_color_index = (self.point_color_index + 1) % 10 # Elige un color
+        scatterplot = pg.ScatterPlotItem(
+            [new_x],
+            [new_y],
+            symbol='s', # 's' symbol is a square
+            brush=pg.intColor(self.point_color_index),
+            size=self.pointsSize
+        )
         self.scatter_plot_list[plot_index].append(scatterplot)
         plot.addItem(scatterplot)
+        # Añade un punto a la grafica
 
-    def points_clicked(self, points, event):
-        print(points)
+    def curve_clicked(self, event):
+        name = event.name()
+        self.last_name = name
 
     def plot_init(self):
         for i in range(self.SAVE_RESPONSE):
@@ -226,7 +243,7 @@ class BasePlot(object):
             self.plots[f"plot_{i}"] = self.layout.addPlot()
             new_plot = self.plots[f"plot_{i}"]
             new_plot.plot(np.zeros(self.samples), name=f"plot_{i}")
-            # new_plot.scene().sigMouseClicked.connect(self.on_plot_click)
+            new_plot.scene().sigMouseClicked.connect(self.on_plot_click)
             self.set_options(
                 new_plot,
                 **self.kwargs,
@@ -285,7 +302,7 @@ class BasePlot(object):
             )
 
         else:
-            pass
+            print("Fail on ComboBox")
 
     def start(self):
         self.open_stream()
