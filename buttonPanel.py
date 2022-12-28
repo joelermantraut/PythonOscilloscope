@@ -1,20 +1,16 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QDial,
                              QMessageBox, QComboBox, QGroupBox, QVBoxLayout,
-                             QGridLayout)
+                             QGridLayout, QLabel)
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSlot, Qt
-import copy
+from PyQt5 import QtCore
 
 class ButtonPanel(QWidget):
 
     def __init__(self, plotWidget):
         super().__init__()
         self.title = 'Oscilloscope Tools'
-        self.left = 100
-        self.top = 100
-        self.width = 500
-        self.height = 500
         self.offset_amplitude = 50
         self.offset_time = 50
         self.plotWidget = plotWidget
@@ -22,6 +18,22 @@ class ButtonPanel(QWidget):
             [self.invert_Y_0, self.toggle_grid_0, self.delete_all_0, self.change_amplitude_0],
             [self.invert_Y_1, self.toggle_grid_1, self.delete_all_1, self.change_amplitude_1]
         ]
+        self.colors = [
+            "255,0,0",
+            "255,170,0",
+            "170,255,0",
+            "0,255,0",
+            "0,255,170",
+            "0,170,255",
+            "0,0,255",
+            "170,0,255",
+            "255,0,170",
+            "255,0,0",
+        ]
+        self.vbox_panels = list()
+        self.labels = [[], []]
+        self.visible = True
+        self.plotWidget.set_button_panel(self)
         self.init_UI(2)
         self.plotWidget.start()
 
@@ -29,6 +41,15 @@ class ButtonPanel(QWidget):
         def returner():
             return value
         return returner
+
+    def addLabel(self, title, color=None):
+        label = QLabel(self)
+        label.setText(title)
+
+        if color != None:
+            label.setStyleSheet(f"background-color: rgb({self.colors[color]})")
+
+        return label
 
     def addButton(self, title, tooltip, function):
         button = QPushButton(title, self)
@@ -63,7 +84,7 @@ class ButtonPanel(QWidget):
 
         groupBox.setLayout(vbox)
 
-        return groupBox
+        return groupBox, vbox
 
     def init_UI(self, canals_len):
         self.setWindowTitle(self.title)
@@ -79,20 +100,20 @@ class ButtonPanel(QWidget):
         components.append(self.addDial(1, self.plotWidget.get_samples(), self.change_time))
         # Dials
 
-        main_group = self.addGroupBox("Controles comunes", components)
+        main_group, _ = self.addGroupBox("Controles comunes", components)
         # Controles globales
 
-        canals = list()
+        self.canals = list()
         for i in range(canals_len):
-            canals.append(self.add_panel(f"Canal {chr(65 + i)}", i))
+            self.canals.append(self.add_panel(f"Canal {chr(65 + i)}", i))
             # El indice del canal se describe con letras mayusculas
         # Genera los paneles
 
         grid = QGridLayout()
 
         grid.addWidget(main_group, 0, 0)
-        for canal_index in range(len(canals)):
-            grid.addWidget(canals[canal_index], 0, canal_index + 1)
+        for canal_index in range(len(self.canals)):
+            grid.addWidget(self.canals[canal_index], 0, canal_index + 1)
         self.setLayout(grid)
         # Agrega los paneles a la grilla
 
@@ -110,8 +131,33 @@ class ButtonPanel(QWidget):
         # Button Panels
         components.append(self.addDial(1, 250, self.callbacks[index][3]))
         # Dials
+        components.append(self.addLabel('Lista de puntos'))
 
-        return self.addGroupBox(title, components)
+        groupBox, vbox = self.addGroupBox(title, components)
+
+        self.vbox_panels.append(vbox)
+
+        return groupBox
+
+    def addPoint(self, plot_index, x, y, color):
+        """
+        Agrega un punto a la lista de puntos, mostrando el punto
+        y el color utilizando en el indicador sobre la grafica
+        """
+        self.labels[plot_index].append(self.addLabel(f"x: {round(x, 2)}, y: {round(x, 2)}", color))
+
+        self.vbox_panels[plot_index].addWidget(self.labels[plot_index][-1])
+
+    def is_visible(self):
+        return self.visible
+
+    def change_visibility(self):
+        if self.visible:
+            self.hide()
+        else:
+            self.show()
+
+        self.visible = not(self.visible)
 
     # Buttons Callbacks
 
@@ -142,7 +188,10 @@ class ButtonPanel(QWidget):
     @pyqtSlot()
     def delete_all_0(self):
         self.plotWidget.delete_all(0)
-
+        for label in self.labels[0]:
+            self.vbox_panels[0].removeWidget(label)
+        QtCore.QCoreApplication.processEvents()
+            
     @pyqtSlot()
     def delete_all_1(self):
         self.plotWidget.delete_all(1)
@@ -174,12 +223,3 @@ class ButtonPanel(QWidget):
     def closeEvent(self, event):
         event.accept()
         self.plotWidget.close()
-        # reply = QMessageBox.question(self, '¿Cerrar ventana?', '¿Está seguro que quiere cerrar la ventana?',
-        #         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-
-        # if reply == QMessageBox.Yes:
-        #     event.accept()
-        #     self.plotWidget.close()
-        #     print('Oscilloscope Tools closed')
-        # else:
-        #     event.ignore()

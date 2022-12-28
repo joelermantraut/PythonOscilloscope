@@ -9,13 +9,10 @@ class BasePlot(object):
         self.stream = stream
         self.kwargs = kwargs
 
-        self.layout = pg.GraphicsLayoutWidget()
-        self.layout.showMaximized()
-        self.layout.setWindowTitle('Software Oscilloscope')
-        self.layout.closeEvent = self.close
         self.scatter_plot_list = list()
         self.plots = dict()
 
+        self.SPLIT_CHAR = ","
         self.SAVE_RESPONSE = 20
         self.SIMPLE = 0
         self.A_PLUS_B = 1
@@ -27,42 +24,97 @@ class BasePlot(object):
         self.samples = 500
         self.inverted = False
         self.pointsSize = 7
-        self.curve_width_sensibility = 10
+        self.curve_width_sensibility = 5
         self.fft_mode = False
         self.grid = False
         self.last_name = ""
-        self.point_color_index = 0
+        self.point_color_index = -1 # -1 para que el conteo arranque en 0
         self.limit_scatter_points = 10
         self.mode = self.SIMPLE
-        self.tolerance = 1
+        self.tolerance = 0.1
+        self.buttonPanel = None
+        self.verbose = False
+
+        self.initUI()
+
+    def initUI(self):
+        self.layout = pg.GraphicsLayoutWidget()
+        self.layout.showMaximized()
+        self.layout.setWindowTitle('Software Oscilloscope')
+        self.layout.closeEvent = self.close
+
+    def addControlsButton(self):
+        proxy = QtGui.QGraphicsProxyWidget()
+
+        button = QtGui.QPushButton('Mostrar/Ocultar Controles')
+        button.setCheckable(True)
+        button.toggle() # Para que inicie pulsado
+        button.clicked.connect(self.toggle_controls)
+
+        proxy.setWidget(button)
+
+        self.layout.addItem(proxy, row=len(self.plots) + 1, col=0)
+
+    def toggle_controls(self):
+        self.buttonPanel.change_visibility()
 
     def _translate_range(self, value, in_min, in_max, out_min, out_max):
+        """
+        Implementa la traducción de un valor de un rango a otro.
+        """
         return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
-    def _range_compare(self, value1, value2, tol=self.tolerance):
+    def _range_compare(self, value1, value2, tol=None):
+        """
+        Devuelve True si los dos valores pasados como parametros
+        estan dentro de la tolerancia definida.
+        """
+        if tol == None:
+            tol = self.tolerance
+
         if abs(value1 - value2) > tol:
             return False
         else:
             return True
 
+    def set_button_panel(self, buttonPanel):
+        """
+        Define la propiedad del panel de botones para poder
+        acceder a esta interfaz generada por fuera de la clase.
+        """
+        self.buttonPanel = buttonPanel
+
     def get_samples(self):
+        """
+        Devuelve el parametro "samples".
+        """
         return self.samples
 
     def set_options(self, plot, **kwargs):
+        """
+        Configura un conjunto de opciones, algunas definidas
+        por defecto, otras recibidas como un parametro en la
+        instanciación de la clase.
+        """
         options = kwargs.keys()
 
-        # if "xlim" in options:
-        #     self.change_amplitude(kwargs["xlim"])
-        # else:
-        #     self.change_amplitude(1.25)
+        if "xlim" in options:
+            self.change_time(kwargs["xlim"])
+        else:
+            plot.enableAutoRange(axis="x")
+        # Recibe un valor y setea los limites en el eje X (tiempo)
 
-        # if "ylim" in options:
-        #     self.change_time(kwargs["ylim"])
-        # else:
-        #     self.change_time(1.25)
+        if "ylim" in options:
+            self.change_amplitude(list(self.plots.values()).index(plot), kwargs["ylim"])
+        else:
+            plot.enableAutoRange(axis="y")
+        # Recibe una tupla con el limite inferior y superior
 
         if "setMouseEnabled" in options:
-            plot.setMouseEnabled(True, True)
+            if kwargs["setMouseEnabled"]:
+                plot.setMouseEnabled(True, True)
+            else:
+                plot.setMouseEnabled(False, False)
 
         if "hideButtons" in options:
             plot.hideButtons()
@@ -79,11 +131,20 @@ class BasePlot(object):
             plotDataItems.setCurveClickable(True, self.curve_width_sensibility)
             plotDataItems.sigClicked.connect(self.curve_clicked)
 
+        if "verbose" in options:
+            self.verbose = kwargs["verbose"]
+
     def open_stream(self):
+        """
+        Abre la comunicacion serie.
+        """
         print("Opening Stream")
         self.stream.open()
 
     def close_stream(self):
+        """
+        Cierra la comunicacion serie.
+        """
         try:
             if hasattr(self.stream, 'flushInput'):
                 self.stream.flushInput()
@@ -96,14 +157,24 @@ class BasePlot(object):
         print("Stream closed")
 
     def validate(self, data):
+        """
+        Valida el dato recibido. Este metodo se aplica
+        porque a mucha velocidad, a veces algunos datos se
+        puede perder o corromper.
+        """
         return data
 
     def decode(self, data):
+        """
+        Decodifica el dato recibido.
+        """
         return data
 
     def read_stream(self):
-        stream_data = self.stream.readline().decode('utf-8').rstrip().split(',')
-        # TODO: Confirmar la informacion recibida
+        """
+        Lee desde la comunicacion serie.
+        """
+        stream_data = self.stream.readline().decode('utf-8').rstrip().split(self.SPLIT_CHAR)
 
         stream_data = self.validate(stream_data)
         stream_data = self.decode(stream_data)
@@ -111,27 +182,54 @@ class BasePlot(object):
         return stream_data
 
     def write_stream(self, text):
+        """
+        Escribe sobre la comunicacion serie.
+        """
         self.stream.write(text)
 
     def change_amplitude(self, index, band):
+        """
+        Cambia la escala Y, para la grafica seleccionada.
+        """
         plot = list(self.plots.values())[index]
-        plot.setYRange(-band / 2, band / 2)
+        plot.setYRange(band[0], band[1])
 
     def change_time(self, band):
+        """
+        Cambia la escala X, para todas las graficas.
+        """
         for plot in self.plots.values():
             plot.setXRange(0, band)
 
     def autorange(self):
+        """
+        Determina automaticamente las escalas de los ejes, según
+        la grafica utilizada.
+        """
         for plot in self.plots.values():
             plot.autoRange()
 
     def invert_Y(self, index):
+        """
+        Invierte el eje de la grafica seleccionada.
+        """
         self.inverted = not self.inverted
 
         plot = list(self.plots.values())[index]
         plot.invertY(self.inverted)
 
     def on_mode_change(self, text):
+        """
+        Permite cambiar el modo empleado. Los modos disponibles
+        son:
+
+        "Simple": Modo basica, muestra cada curva segun los puntos
+        son recibidos.
+        "A + B": Suma las dos primeras graficas.
+        "A - B": Resta las dos primeras graficas.
+        "A * B": Multiplica las dos primera graficas.
+        "A / B": Divide las dos primeras graficas.
+        """
         if text == "Simple":
             self.mode = self.SIMPLE
         elif text == "A + B":
@@ -146,17 +244,26 @@ class BasePlot(object):
             print("Fallo widget de seleccion de modo")
 
     def toggle_grid(self, index):
+        """
+        Alterna la visibilidad de la grilla.
+        """
         self.grid = not self.grid
 
         plot = list(self.plots.values())[index]
         plot.showGrid(self.grid, self.grid)
 
     def delete_all(self, index):
+        """
+        Elimina todos los puntos de la grafica.
+        """
         plot = list(self.plots.values())[index]
         for item in self.scatter_plot_list[index]:
             plot.removeItem(item)
 
     def apply_fft(self):
+        """
+        Aplica FFT desde la funcion de la misma grafica.
+        """
         self.fft_mode = not self.fft_mode
 
         for plot in self.plots.values():
@@ -164,6 +271,9 @@ class BasePlot(object):
             curve.setFftMode(self.fft_mode)
 
     def get_plot_info(self, plot):
+        """
+        Devuelve informacion basica de una de las graficas.
+        """
         geo = plot.viewGeometry()
 
         bottom = plot.getAxis('bottom')
@@ -180,18 +290,28 @@ class BasePlot(object):
 
         return new_dict
 
-    def verify_point_click(self, plot_index, x, y):
+    def verify_point_click(self, plot, plot_index, x, y):
+        """
+        Verifica que el punto de la curva clickeado este dentro de
+        la tolerancia establecida.
+        """
         for point in self.scatter_plot_list[plot_index]:
             coords = point.getData()
             point_x = coords[0][0]
             point_y = coords[1][0]
 
-            if x == point_x and y == point_y:
+            if self._range_compare(x, point_x) and self._range_compare(y, point_y):
+                plot.removeItem(point)
+
                 return True
 
         return False
 
     def on_plot_click(self, event):
+        """
+        Funcion invocada cuando una grafica es clickeada, no requiere
+        que sea haga click sobre la curva.
+        """
         if self.last_name == "":
             return
         name = self.last_name
@@ -207,7 +327,7 @@ class BasePlot(object):
         plot_dict = self.get_plot_info(plot)
         # Obtiene informacion de la grafica clickeada
 
-        if self.verify_point_click(plot_index, new_x, new_y):
+        if self.verify_point_click(plot, plot_index, new_x, new_y):
             return
 
         if len(self.scatter_plot_list[plot_index]) > self.limit_scatter_points:
@@ -226,11 +346,20 @@ class BasePlot(object):
         plot.addItem(scatterplot)
         # Añade un punto a la grafica
 
+        self.buttonPanel.addPoint(plot_index, new_x, new_y, self.point_color_index)
+
     def curve_clicked(self, event):
+        """
+        Funcion invocada cuando un elemento ScatterPlotItem es clickeado.
+        """
         name = event.name()
         self.last_name = name
 
     def plot_init(self):
+        """
+        Invocada al inicio de la ejecucion, genera la cantidad
+        de graficas necesarias, con sus correspondientes propiedades.
+        """
         for i in range(self.SAVE_RESPONSE):
             self.read_stream()
         # Descarta una cierta cantidad de muestras
@@ -240,7 +369,7 @@ class BasePlot(object):
         trial_data = self.read_stream()
 
         for i in range(len(trial_data)):
-            self.plots[f"plot_{i}"] = self.layout.addPlot()
+            self.plots[f"plot_{i}"] = self.layout.addPlot(row=i+1, col=0)
             new_plot = self.plots[f"plot_{i}"]
             new_plot.plot(np.zeros(self.samples), name=f"plot_{i}")
             new_plot.scene().sigMouseClicked.connect(self.on_plot_click)
@@ -257,6 +386,9 @@ class BasePlot(object):
             self.scatter_plot_list.append(list())
 
     def update_widget(self, plot, data):
+        """
+        Actualiza directamente los puntos sobre la grafica.
+        """
         plot = plot.listDataItems()[0]
 
         yData = plot.yData
@@ -271,7 +403,14 @@ class BasePlot(object):
         plot.sigPlotChanged.emit(plot)
 
     def update(self):
+        """
+        Funcion invocada en cada actualizacion de la grafica. Toma en cuenta
+        el modo en el que esta funcionando.
+        """
         stream_data = self.read_stream()
+
+        if self.verbose:
+            print(stream_data)
 
         if self.mode == self.SIMPLE:
             for data, plot in zip(stream_data, self.plots.values()):
@@ -305,6 +444,9 @@ class BasePlot(object):
             print("Fail on ComboBox")
 
     def start(self):
+        """
+        Funcion que inicia la adquisicion de datos.
+        """
         self.open_stream()
         self.plot_init()
 
@@ -312,10 +454,15 @@ class BasePlot(object):
         self.timer.timeout.connect(self.update)
         self.timer.start(1 / self.samples)
 
+        self.addControlsButton()
+
         if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
             self.app.exec_()
 
     def stop_and_run(self):
+        """
+        Funcion que frena o reiniciar la adquisicion de datos.
+        """
         if self.timer.isActive():
             self.timer.stop()
         else:
@@ -323,6 +470,9 @@ class BasePlot(object):
             self.timer.start()
 
     def close(self, event=None):
+        """
+        Invocado al cerrar la interfaz.
+        """
         self.timer.stop()
         self.close_stream()
         self.app.exit()

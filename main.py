@@ -8,7 +8,7 @@ import sys
 def main():
     app = QApplication(sys.argv)
 
-    plot = SerialPlot(app, 'COM4', 500000)
+    plot = SerialPlot(app, 'COM10', 9600, verbose=False, xlim=500, ylim=(-1, 1))
     buttonPanel = ButtonPanel(plot)
 
     sys.exit(app.exec_())
