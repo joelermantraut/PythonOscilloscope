@@ -144,7 +144,7 @@ class ButtonPanel(QWidget):
         Agrega un punto a la lista de puntos, mostrando el punto
         y el color utilizando en el indicador sobre la grafica
         """
-        self.labels[plot_index].append(self.addLabel(f"x: {round(x, 2)}, y: {round(x, 2)}", color))
+        self.labels[plot_index].append(self.addLabel(f"x: {round(x, 2)}, y: {round(y, 2)}", color))
 
         self.vbox_panels[plot_index].addWidget(self.labels[plot_index][-1])
 
@@ -188,13 +188,20 @@ class ButtonPanel(QWidget):
     @pyqtSlot()
     def delete_all_0(self):
         self.plotWidget.delete_all(0)
-        for label in self.labels[0]:
-            self.vbox_panels[0].removeWidget(label)
-        QtCore.QCoreApplication.processEvents()
+        for label_index in range(len(self.labels[0])):
+            label = self.labels[0][label_index]
+            label.setParent(None)
+
+        self.labels[0] = []
             
     @pyqtSlot()
     def delete_all_1(self):
         self.plotWidget.delete_all(1)
+        for label_index in range(len(self.labels[1])):
+            label = self.labels[1][label_index]
+            label.setParent(None)
+
+        self.labels[1] = []
 
     @pyqtSlot()
     def apply_fft(self):
@@ -203,11 +210,11 @@ class ButtonPanel(QWidget):
     # Dials Callbacks
 
     def change_amplitude_0(self, value):
-        self.plotWidget.change_amplitude(0, value / 100)
+        self.plotWidget.change_amplitude(0, (-value / 50, value / 50))
         # Lo divido por 100 porque el rango va de 0 a 250
 
     def change_amplitude_1(self, value):
-        self.plotWidget.change_amplitude(1, value / 100)
+        self.plotWidget.change_amplitude(1, (-value / 50, value / 50))
         # Lo divido por 100 porque el rango va de 0 a 250
 
     def change_time(self, value):
