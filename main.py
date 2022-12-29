@@ -10,6 +10,7 @@ def main():
 
     plot = SerialPlot(app, 'COM10', 9600, verbose=False, xlim=500, ylim=(-1, 1))
     buttonPanel = ButtonPanel(plot)
+    plot.set_button_panel(buttonPanel)
 
     sys.exit(app.exec_())
 

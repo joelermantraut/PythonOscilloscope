@@ -1,8 +1,8 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QDial,
                              QMessageBox, QComboBox, QGroupBox, QVBoxLayout,
-                             QGridLayout, QLabel)
-from PyQt5.QtGui import QIcon
+                             QGridLayout, QLabel, QLineEdit)
+from PyQt5.QtGui import QIcon, QIntValidator
 from PyQt5.QtCore import pyqtSlot, Qt
 from PyQt5 import QtCore
 
@@ -33,6 +33,7 @@ class ButtonPanel(QWidget):
         self.vbox_panels = list()
         self.labels = [[], []]
         self.visible = True
+        self.memory_mode = False
         self.plotWidget.set_button_panel(self)
         self.init_UI(2)
         self.plotWidget.start()
@@ -86,6 +87,13 @@ class ButtonPanel(QWidget):
 
         return groupBox, vbox
 
+    def addLineEdit(self, callback):
+        textbox = QLineEdit(self)
+        textbox.setAlignment(Qt.AlignCenter)
+        textbox.setValidator(QIntValidator(0, 999, self))
+        textbox.returnPressed.connect(callback)
+        return textbox
+
     def init_UI(self, canals_len):
         self.setWindowTitle(self.title)
 
@@ -114,6 +122,15 @@ class ButtonPanel(QWidget):
         grid.addWidget(main_group, 0, 0)
         for canal_index in range(len(self.canals)):
             grid.addWidget(self.canals[canal_index], 0, canal_index + 1)
+        # Canales
+        
+        grid.addWidget(self.addLabel('Modo memoria'), 1, 0)
+        self.max_time_line_edit = self.addLineEdit(self.change_max_time_line_edit)
+        grid.addWidget(self.max_time_line_edit, 2, 0)
+        self.init_memory_mode_btn = self.addButton('Comenzar', 'Este boton comienza con el modo memoria', self.start_memory_mode)
+        grid.addWidget(self.init_memory_mode_btn, 2, 1)
+        # Modo memoria
+
         self.setLayout(grid)
         # Agrega los paneles a la grilla
 
@@ -207,6 +224,23 @@ class ButtonPanel(QWidget):
     def apply_fft(self):
         self.plotWidget.apply_fft()
 
+    @pyqtSlot()
+    def start_memory_mode(self):
+        time = self.max_time_line_edit.text()
+        self.memory_mode = not self.memory_mode
+
+        if self.memory_mode:
+            self.init_memory_mode_btn.setStyleSheet("background-color: green; color: white")
+        else:
+            self.init_memory_mode_btn.setStyleSheet("background-color: lightgrey")
+
+        self.plotWidget.start_memory_mode(self.memory_mode, time)
+
+    @pyqtSlot()
+    def change_max_time_line_edit(self):
+        self.start_memory_mode()
+        # Se dispara cuando se presiona ENTER en el LineEdit
+
     # Dials Callbacks
 
     def change_amplitude_0(self, value):
@@ -226,6 +260,10 @@ class ButtonPanel(QWidget):
         self.plotWidget.on_mode_change(text)
 
     # Others Events
+
+    def disable_memory_mode(self):
+        self.memory_mode = False
+        self.init_memory_mode_btn.setStyleSheet("background-color: lightgrey")
 
     def closeEvent(self, event):
         event.accept()

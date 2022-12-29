@@ -14,6 +14,7 @@ class BasePlot(object):
 
         self.SPLIT_CHAR = ","
         self.SAVE_RESPONSE = 20
+        self.NOISE_BAND = 0.1
         self.SIMPLE = 0
         self.A_PLUS_B = 1
         self.A_MINUS_B = 2
@@ -34,6 +35,8 @@ class BasePlot(object):
         self.tolerance = 0.1
         self.buttonPanel = None
         self.verbose = False
+        self.memory_mode = False
+        self.memory_mode_time = 0
 
         self.initUI()
 
@@ -412,6 +415,17 @@ class BasePlot(object):
         if self.verbose:
             print(stream_data)
 
+        if self.memory_mode:
+            # Reviso si los valores recibidos estan dentro del margen de ruido
+            if float(stream_data[0]) < 0 and float(stream_data[0]) < -self.NOISE_BAND or \
+                float(stream_data[0]) > 0 and float(stream_data[0]) > self.NOISE_BAND:
+                self.timer_memory_mode = QtCore.QTimer()
+                self.timer_memory_mode.timeout.connect(self.disable_memory_mode)
+                self.timer_memory_mode.start(self.memory_mode_time)
+                self.memory_mode = False
+            else:
+                return
+
         if self.mode == self.SIMPLE:
             for data, plot in zip(stream_data, self.plots.values()):
                 self.update_widget(plot, data)
@@ -468,6 +482,23 @@ class BasePlot(object):
         else:
             self.stream.flushInput() # Descarto todo el contenido acumulado
             self.timer.start()
+
+    def start_memory_mode(self, mode, time):
+        """
+        Funcion que inicia el modo de memoria que permite capturar
+        transitorios en la entrada.
+
+        La logica aplicada, es que los valores de ruido se descartan, hasta que ingresa
+        un valor que aparenta ser una señal. Entonces se mide hasta que finaliza el tiempo
+        determinado por "time".
+        """
+        self.memory_mode = mode
+        self.memory_mode_time = int(time)
+
+    def disable_memory_mode(self):
+        self.timer.stop()
+        self.timer_memory_mode.stop()
+        self.buttonPanel.disable_memory_mode()
 
     def close(self, event=None):
         """
