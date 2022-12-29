@@ -389,7 +389,7 @@ class BasePlot(object):
             self.layout.nextRow()
             self.scatter_plot_list.append(list())
 
-    def update_widget(self, plot, data):
+    def _update_widget(self, plot, data):
         """
         Actualiza directamente los puntos sobre la grafica.
         """
@@ -403,10 +403,10 @@ class BasePlot(object):
             x=np.arange(len(plot.yData)),
             y=np.roll(yData, -1),
         )
-        plot.updateItems()
+        plot._updateItems()
         plot.sigPlotChanged.emit(plot)
 
-    def update(self):
+    def _update(self):
         """
         Funcion invocada en cada actualizacion de la grafica. Toma en cuenta
         el modo en el que esta funcionando.
@@ -429,28 +429,28 @@ class BasePlot(object):
 
         if self.mode == self.SIMPLE:
             for data, plot in zip(stream_data, self.plots.values()):
-                self.update_widget(plot, data)
+                self._update_widget(plot, data)
 
         elif self.mode == self.A_PLUS_B:
-            self.update_widget(
+            self._update_widget(
                 list(self.plots.values())[0],
                 str(float(stream_data[0]) + float(stream_data[1]))
             )
 
         elif self.mode == self.A_MINUS_B:
-            self.update_widget(
+            self._update_widget(
                 list(self.plots.values())[0],
                 str(float(stream_data[0]) - float(stream_data[1]))
             )
 
         elif self.mode == self.A_X_B:
-            self.update_widget(
+            self._update_widget(
                 list(self.plots.values())[0],
                 str(float(stream_data[0]) * float(stream_data[1]))
             )
 
         elif self.mode == self.A_DIV_B:
-            self.update_widget(
+            self._update_widget(
                 list(self.plots.values())[0],
                 str(float(stream_data[0]) / float(stream_data[1]))
             )
@@ -466,7 +466,7 @@ class BasePlot(object):
         self._plot_init()
 
         self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.update)
+        self.timer.timeout.connect(self._update)
         self.timer.start(1 / self.samples)
 
         self.addControlsButton()
