@@ -227,6 +227,12 @@ class ButtonPanel(QWidget):
     @pyqtSlot()
     def start_memory_mode(self):
         time = self.max_time_line_edit.text()
+
+        if len(time) == 0:
+            return
+
+        time = int(time)
+
         self.memory_mode = not self.memory_mode
 
         if self.memory_mode:

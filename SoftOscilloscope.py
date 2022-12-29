@@ -12,6 +12,7 @@ class BasePlot(object):
         self.scatter_plot_list = list()
         self.plots = dict()
 
+        self.ENCODING = "utf-8"
         self.SPLIT_CHAR = ","
         self.SAVE_RESPONSE = 20
         self.NOISE_BAND = 0.1
@@ -52,13 +53,13 @@ class BasePlot(object):
         button = QtGui.QPushButton('Mostrar/Ocultar Controles')
         button.setCheckable(True)
         button.toggle() # Para que inicie pulsado
-        button.clicked.connect(self.toggle_controls)
+        button.clicked.connect(self._toggle_controls)
 
         proxy.setWidget(button)
 
         self.layout.addItem(proxy, row=len(self.plots) + 1, col=0)
 
-    def toggle_controls(self):
+    def _toggle_controls(self):
         self.buttonPanel.change_visibility()
 
     def _translate_range(self, value, in_min, in_max, out_min, out_max):
@@ -93,7 +94,7 @@ class BasePlot(object):
         """
         return self.samples
 
-    def set_options(self, plot, **kwargs):
+    def _set_options(self, plot, **kwargs):
         """
         Configura un conjunto de opciones, algunas definidas
         por defecto, otras recibidas como un parametro en la
@@ -132,19 +133,19 @@ class BasePlot(object):
             plotDataItems = plot.listDataItems()[0]
             # scatterDataItems = plot.listDataItems()[2]
             plotDataItems.setCurveClickable(True, self.curve_width_sensibility)
-            plotDataItems.sigClicked.connect(self.curve_clicked)
+            plotDataItems.sigClicked.connect(self._curve_clicked)
 
         if "verbose" in options:
             self.verbose = kwargs["verbose"]
 
-    def open_stream(self):
+    def _open_stream(self):
         """
         Abre la comunicacion serie.
         """
         print("Opening Stream")
         self.stream.open()
 
-    def close_stream(self):
+    def _close_stream(self):
         """
         Cierra la comunicacion serie.
         """
@@ -159,7 +160,7 @@ class BasePlot(object):
         self.stream.close()
         print("Stream closed")
 
-    def validate(self, data):
+    def _validate(self, data):
         """
         Valida el dato recibido. Este metodo se aplica
         porque a mucha velocidad, a veces algunos datos se
@@ -167,24 +168,24 @@ class BasePlot(object):
         """
         return data
 
-    def decode(self, data):
+    def _decode(self, data):
         """
         Decodifica el dato recibido.
         """
         return data
 
-    def read_stream(self):
+    def _read_stream(self):
         """
         Lee desde la comunicacion serie.
         """
-        stream_data = self.stream.readline().decode('utf-8').rstrip().split(self.SPLIT_CHAR)
+        stream_data = self.stream.readline().decode(self.ENCODING).rstrip().split(self.SPLIT_CHAR)
 
-        stream_data = self.validate(stream_data)
-        stream_data = self.decode(stream_data)
+        stream_data = self._validate(stream_data)
+        stream_data = self._decode(stream_data)
 
         return stream_data
 
-    def write_stream(self, text):
+    def _write_stream(self, text):
         """
         Escribe sobre la comunicacion serie.
         """
@@ -273,7 +274,7 @@ class BasePlot(object):
             curve = plot.listDataItems()[0]
             curve.setFftMode(self.fft_mode)
 
-    def get_plot_info(self, plot):
+    def _get_plot_info(self, plot):
         """
         Devuelve informacion basica de una de las graficas.
         """
@@ -293,7 +294,7 @@ class BasePlot(object):
 
         return new_dict
 
-    def verify_point_click(self, plot, plot_index, x, y):
+    def _verify_point_click(self, plot, plot_index, x, y):
         """
         Verifica que el punto de la curva clickeado este dentro de
         la tolerancia establecida.
@@ -310,7 +311,7 @@ class BasePlot(object):
 
         return False
 
-    def on_plot_click(self, event):
+    def _on_plot_click(self, event):
         """
         Funcion invocada cuando una grafica es clickeada, no requiere
         que sea haga click sobre la curva.
@@ -327,10 +328,10 @@ class BasePlot(object):
 
         plot = self.plots[name]
         plot_index = list(self.plots.keys()).index(name)
-        plot_dict = self.get_plot_info(plot)
+        plot_dict = self._get_plot_info(plot)
         # Obtiene informacion de la grafica clickeada
 
-        if self.verify_point_click(plot, plot_index, new_x, new_y):
+        if self._verify_point_click(plot, plot_index, new_x, new_y):
             return
 
         if len(self.scatter_plot_list[plot_index]) > self.limit_scatter_points:
@@ -351,32 +352,32 @@ class BasePlot(object):
 
         self.buttonPanel.addPoint(plot_index, new_x, new_y, self.point_color_index)
 
-    def curve_clicked(self, event):
+    def _curve_clicked(self, event):
         """
         Funcion invocada cuando un elemento ScatterPlotItem es clickeado.
         """
         name = event.name()
         self.last_name = name
 
-    def plot_init(self):
+    def _plot_init(self):
         """
         Invocada al inicio de la ejecucion, genera la cantidad
         de graficas necesarias, con sus correspondientes propiedades.
         """
         for i in range(self.SAVE_RESPONSE):
-            self.read_stream()
+            self._read_stream()
         # Descarta una cierta cantidad de muestras
         # para asegurar que los primeros datos no 
         # influyan en la lectura
 
-        trial_data = self.read_stream()
+        trial_data = self._read_stream()
 
         for i in range(len(trial_data)):
             self.plots[f"plot_{i}"] = self.layout.addPlot(row=i+1, col=0)
             new_plot = self.plots[f"plot_{i}"]
             new_plot.plot(np.zeros(self.samples), name=f"plot_{i}")
-            new_plot.scene().sigMouseClicked.connect(self.on_plot_click)
-            self.set_options(
+            new_plot.scene().sigMouseClicked.connect(self._on_plot_click)
+            self._set_options(
                 new_plot,
                 **self.kwargs,
                 setMouseEnabled=True,
@@ -410,7 +411,7 @@ class BasePlot(object):
         Funcion invocada en cada actualizacion de la grafica. Toma en cuenta
         el modo en el que esta funcionando.
         """
-        stream_data = self.read_stream()
+        stream_data = self._read_stream()
 
         if self.verbose:
             print(stream_data)
@@ -461,8 +462,8 @@ class BasePlot(object):
         """
         Funcion que inicia la adquisicion de datos.
         """
-        self.open_stream()
-        self.plot_init()
+        self._open_stream()
+        self._plot_init()
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update)
@@ -493,7 +494,7 @@ class BasePlot(object):
         determinado por "time".
         """
         self.memory_mode = mode
-        self.memory_mode_time = int(time)
+        self.memory_mode_time = time
 
     def disable_memory_mode(self):
         self.timer.stop()
@@ -505,7 +506,7 @@ class BasePlot(object):
         Invocado al cerrar la interfaz.
         """
         self.timer.stop()
-        self.close_stream()
+        self._close_stream()
         self.app.exit()
 
 class SerialPlot(BasePlot):
