@@ -21,9 +21,13 @@ class BasePlot(object):
         self.A_MINUS_B = 2
         self.A_X_B = 3
         self.A_DIV_B = 4
+        self.IN_MIN = 0
+        self.IN_MAX = 4096
+        self.OUT_MIN = 0
+        self.OUT_MAX = 2.9
 
         self.timer = None # Para parar el muestreo
-        self.samples = 500
+        self.samples = 1000
         self.inverted = False
         self.pointsSize = 7
         self.curve_width_sensibility = 5
@@ -45,28 +49,31 @@ class BasePlot(object):
         self.layout = pg.GraphicsLayoutWidget()
         self.layout.showMaximized()
         self.layout.setWindowTitle('Software Oscilloscope')
-        self.layout.closeEvent = self.close
+        self.layout.closeEvent = self._close
 
     def addControlsButton(self):
-        proxy = QtGui.QGraphicsProxyWidget()
+        proxy_controls_btn = QtGui.QGraphicsProxyWidget()
 
         button = QtGui.QPushButton('Mostrar/Ocultar Controles')
         button.setCheckable(True)
         button.toggle() # Para que inicie pulsado
         button.clicked.connect(self._toggle_controls)
 
-        proxy.setWidget(button)
+        proxy_controls_btn.setWidget(button)
 
-        self.layout.addItem(proxy, row=len(self.plots) + 1, col=0)
+        proxy_close_btn = QtGui.QGraphicsProxyWidget()
+
+        button = QtGui.QPushButton('Cerrar Aplicación')
+        button.setCheckable(True)
+        button.clicked.connect(self._close)
+
+        proxy_close_btn.setWidget(button)
+
+        self.layout.addItem(proxy_controls_btn, row=len(self.plots) + 1, col=0)
+        self.layout.addItem(proxy_close_btn, row=len(self.plots) + 1, col=1)
 
     def _toggle_controls(self):
         self.buttonPanel.change_visibility()
-
-    def _translate_range(self, value, in_min, in_max, out_min, out_max):
-        """
-        Implementa la traducción de un valor de un rango a otro.
-        """
-        return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
     def _range_compare(self, value1, value2, tol=None):
         """
@@ -115,10 +122,7 @@ class BasePlot(object):
         # Recibe una tupla con el limite inferior y superior
 
         if "setMouseEnabled" in options:
-            if kwargs["setMouseEnabled"]:
-                plot.setMouseEnabled(True, True)
-            else:
-                plot.setMouseEnabled(False, False)
+            plot.setMouseEnabled(kwargs["setMouseEnabled"], kwargs["setMouseEnabled"])
 
         if "hideButtons" in options:
             plot.hideButtons()
@@ -160,28 +164,55 @@ class BasePlot(object):
         self.stream.close()
         print("Stream closed")
 
+    def _format(self, data):
+        data = data.decode(self.ENCODING).rstrip().split(self.SPLIT_CHAR)
+
+        return data
+
+    def _decode(self, data):
+        """
+        Decodifica el dato recibido. La idea es poder enviar numeros mas grande
+        con menos caracteres, para hacer un mayor aprovechamiento de la velocidad
+        maxima del puerto serie.
+        """
+        return data
+
+    def _translate(self, data, in_min, in_max, out_min, out_max):
+        """
+        Los valores recibidos son enteros de entre 0 y 4096, que corresponden
+        a mediciones de entre 0 y 3.3V, por lo cual, debo convertirlos.
+        """
+        for index, value in enumerate(data):
+            data[index] = round((int(value) - in_min) * (out_max - out_min) / (in_max - in_min) + out_min, 2)
+
+        return data
+
     def _validate(self, data):
         """
         Valida el dato recibido. Este metodo se aplica
         porque a mucha velocidad, a veces algunos datos se
         puede perder o corromper.
-        """
-        return data
 
-    def _decode(self, data):
+        De paso, convierte los valores de cadenas a enteros.
         """
-        Decodifica el dato recibido.
-        """
+        for index, item in enumerate(data):
+            try:
+                data[index] = int(item)
+            except:
+                return ""
+
         return data
 
     def _read_stream(self):
         """
         Lee desde la comunicacion serie.
         """
-        stream_data = self.stream.readline().decode(self.ENCODING).rstrip().split(self.SPLIT_CHAR)
+        stream_data = self.stream.readline()
 
-        stream_data = self._validate(stream_data)
-        stream_data = self._decode(stream_data)
+        stream_data = self._format(stream_data)
+        # stream_data = self._decode(stream_data)
+        # stream_data = self._validate(stream_data)
+        # stream_data = self._translate(stream_data, self.IN_MIN, self.IN_MAX, self.OUT_MIN, self.OUT_MAX)
 
         return stream_data
 
@@ -221,6 +252,9 @@ class BasePlot(object):
 
         plot = list(self.plots.values())[index]
         plot.invertY(self.inverted)
+
+    def change_trigger_freq(self, value):
+        self.timer.setInterval(value)
 
     def on_mode_change(self, text):
         """
@@ -377,10 +411,12 @@ class BasePlot(object):
             new_plot = self.plots[f"plot_{i}"]
             new_plot.plot(np.zeros(self.samples), name=f"plot_{i}")
             new_plot.scene().sigMouseClicked.connect(self._on_plot_click)
+            new_plot.setLabel("bottom", "Tiempo")
+            new_plot.setLabel("left", "Tensión")
             self._set_options(
                 new_plot,
                 **self.kwargs,
-                setMouseEnabled=True,
+                setMouseEnabled=False,
                 setMenuEnabled=True,
                 hideButtons=True,
                 curveClickable=True,
@@ -403,7 +439,7 @@ class BasePlot(object):
             x=np.arange(len(plot.yData)),
             y=np.roll(yData, -1),
         )
-        plot._updateItems()
+        plot.updateItems()
         plot.sigPlotChanged.emit(plot)
 
     def _update(self):
@@ -467,7 +503,7 @@ class BasePlot(object):
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self._update)
-        self.timer.start(1 / self.samples)
+        self.timer.start(1)
 
         self.addControlsButton()
 
@@ -501,7 +537,7 @@ class BasePlot(object):
         self.timer_memory_mode.stop()
         self.buttonPanel.disable_memory_mode()
 
-    def close(self, event=None):
+    def _close(self, event=None):
         """
         Invocado al cerrar la interfaz.
         """
