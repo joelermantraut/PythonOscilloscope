@@ -1,10 +1,11 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QDial,
                              QMessageBox, QComboBox, QGroupBox, QVBoxLayout,
-                             QGridLayout, QLabel, QLineEdit)
+                             QGridLayout, QLabel, QLineEdit, QSlider)
 from PyQt5.QtGui import QIcon, QIntValidator
 from PyQt5.QtCore import pyqtSlot, Qt
 from PyQt5 import QtCore
+import numpy as np
 
 class ButtonPanel(QWidget):
 
@@ -94,6 +95,16 @@ class ButtonPanel(QWidget):
         textbox.returnPressed.connect(callback)
         return textbox
 
+    def addSlider(self, min, max, callback):
+        slider = QSlider(Qt.Horizontal)
+        slider.setMinimum(min)
+        slider.setMaximum(max)
+        slider.setValue(min)
+        slider.setTickInterval(100)
+        slider.valueChanged.connect(callback)
+
+        return slider
+
     def init_UI(self, canals_len):
         self.setWindowTitle(self.title)
 
@@ -117,18 +128,23 @@ class ButtonPanel(QWidget):
             # El indice del canal se describe con letras mayusculas
         # Genera los paneles
 
+        self.trigger_slider = self.addSlider(1, 1000, self.slider_change_value)
+
         grid = QGridLayout()
 
         grid.addWidget(main_group, 0, 0)
         for canal_index in range(len(self.canals)):
             grid.addWidget(self.canals[canal_index], 0, canal_index + 1)
         # Canales
+
+        grid.addWidget(self.addLabel("Disparo"), 1, 0)
+        grid.addWidget(self.trigger_slider, 2, 0)
         
-        grid.addWidget(self.addLabel('Modo memoria'), 1, 0)
+        grid.addWidget(self.addLabel('Modo memoria'), 3, 0)
         self.max_time_line_edit = self.addLineEdit(self.change_max_time_line_edit)
-        grid.addWidget(self.max_time_line_edit, 2, 0)
+        grid.addWidget(self.max_time_line_edit, 4, 0)
         self.init_memory_mode_btn = self.addButton('Comenzar', 'Este boton comienza con el modo memoria', self.start_memory_mode)
-        grid.addWidget(self.init_memory_mode_btn, 2, 1)
+        grid.addWidget(self.init_memory_mode_btn, 4, 1)
         # Modo memoria
 
         self.setLayout(grid)
@@ -146,7 +162,7 @@ class ButtonPanel(QWidget):
         components.append(self.addButton('Grilla', 'Muestra u oculta la grilla', self.callbacks[index][1]))
         components.append(self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', self.callbacks[index][2]))
         # Button Panels
-        components.append(self.addDial(1, 250, self.callbacks[index][3]))
+        components.append(self.addDial(2, 250, self.callbacks[index][3]))
         # Dials
         components.append(self.addLabel('Lista de puntos'))
 
@@ -247,6 +263,11 @@ class ButtonPanel(QWidget):
         self.start_memory_mode()
         # Se dispara cuando se presiona ENTER en el LineEdit
 
+    @pyqtSlot()
+    def slider_change_value(self):
+        value = int(np.log(self.trigger_slider.value()))
+        self.plotWidget.change_trigger_freq(value)
+
     # Dials Callbacks
 
     def change_amplitude_0(self, value):
@@ -273,4 +294,4 @@ class ButtonPanel(QWidget):
 
     def closeEvent(self, event):
         event.accept()
-        self.plotWidget.close()
+        self.plotWidget._close()
