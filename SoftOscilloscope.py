@@ -1,5 +1,5 @@
-import serial, socket, sys
-from pyqtgraph.Qt import QtGui, QtCore
+import serial, sys
+from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 import pyqtgraph as pg
 import numpy as np
 
@@ -22,9 +22,9 @@ class BasePlot(object):
         self.A_X_B = 3
         self.A_DIV_B = 4
         self.IN_MIN = 0
-        self.IN_MAX = 4096
-        self.OUT_MIN = 0
-        self.OUT_MAX = 2.9
+        self.IN_MAX = 4095
+        self.OUT_MIN = 1.25
+        self.OUT_MAX = 1.75
 
         self.timer = None # Para parar el muestreo
         self.samples = 1000
@@ -52,18 +52,18 @@ class BasePlot(object):
         self.layout.closeEvent = self._close
 
     def addControlsButton(self):
-        proxy_controls_btn = QtGui.QGraphicsProxyWidget()
+        proxy_controls_btn = QtWidgets.QGraphicsProxyWidget()
 
-        button = QtGui.QPushButton('Mostrar/Ocultar Controles')
+        button = QtWidgets.QPushButton('Mostrar/Ocultar Controles')
         button.setCheckable(True)
         button.toggle() # Para que inicie pulsado
         button.clicked.connect(self._toggle_controls)
 
         proxy_controls_btn.setWidget(button)
 
-        proxy_close_btn = QtGui.QGraphicsProxyWidget()
+        proxy_close_btn = QtWidgets.QGraphicsProxyWidget()
 
-        button = QtGui.QPushButton('Cerrar Aplicación')
+        button = QtWidgets.QPushButton('Cerrar Aplicación')
         button.setCheckable(True)
         button.clicked.connect(self._close)
 
@@ -165,6 +165,7 @@ class BasePlot(object):
         print("Stream closed")
 
     def _format(self, data):
+        data = data[1:] # Para eliminar /0 enviado por error por HAL
         data = data.decode(self.ENCODING).rstrip().split(self.SPLIT_CHAR)
 
         return data
@@ -211,8 +212,8 @@ class BasePlot(object):
 
         stream_data = self._format(stream_data)
         # stream_data = self._decode(stream_data)
-        # stream_data = self._validate(stream_data)
-        # stream_data = self._translate(stream_data, self.IN_MIN, self.IN_MAX, self.OUT_MIN, self.OUT_MAX)
+        stream_data = self._validate(stream_data)
+        stream_data = self._translate(stream_data, self.IN_MIN, self.IN_MAX, self.OUT_MIN, self.OUT_MAX)
 
         return stream_data
 
