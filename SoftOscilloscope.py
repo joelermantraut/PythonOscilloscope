@@ -3,11 +3,17 @@ from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 import pyqtgraph as pg
 import numpy as np
 
+class TimeAxisItem(pg.AxisItem):
+    def tickStrings(self, values, scale, spacing):
+        return values
+
 class BasePlot(object):
-    def __init__(self, app, stream, **kwargs):
+    def __init__(self, app, stream, n_plots, **kwargs):
+        pg.setConfigOptions(antialias=True)
         self.app = app
         self.stream = stream
         self.kwargs = kwargs
+        self.n_plots = n_plots
 
         self.scatter_plot_list = list()
         self.plots = dict()
@@ -23,11 +29,11 @@ class BasePlot(object):
         self.A_DIV_B = 4
         self.IN_MIN = 0
         self.IN_MAX = 4095
-        self.OUT_MIN = 1.25
-        self.OUT_MAX = 1.75
+        self.OUT_MIN = -3
+        self.OUT_MAX = 3
+        self.samples = 10500
 
         self.timer = None # Para parar el muestreo
-        self.samples = 1000
         self.inverted = False
         self.pointsSize = 7
         self.curve_width_sensibility = 5
@@ -42,6 +48,8 @@ class BasePlot(object):
         self.verbose = False
         self.memory_mode = False
         self.memory_mode_time = 0
+        self.channel_data = list()
+        self.xlim = 0
 
         self.initUI()
 
@@ -110,6 +118,7 @@ class BasePlot(object):
         options = kwargs.keys()
 
         if "xlim" in options:
+            self.xlim = kwargs["xlim"]
             self.change_time(kwargs["xlim"])
         else:
             plot.enableAutoRange(axis="x")
@@ -122,7 +131,7 @@ class BasePlot(object):
         # Recibe una tupla con el limite inferior y superior
 
         if "setMouseEnabled" in options:
-            plot.setMouseEnabled(kwargs["setMouseEnabled"], kwargs["setMouseEnabled"])
+            plot.setMouseEnabled(kwargs["setMouseEnabled"][0], kwargs["setMouseEnabled"][1])
 
         if "hideButtons" in options:
             plot.hideButtons()
@@ -164,24 +173,10 @@ class BasePlot(object):
         self.stream.close()
         print("Stream closed")
 
-    def _format(self, data):
-        data = data[1:] # Para eliminar /0 enviado por error por HAL
-        data = data.decode(self.ENCODING).rstrip().split(self.SPLIT_CHAR)
-
-        return data
-
-    def _decode(self, data):
-        """
-        Decodifica el dato recibido. La idea es poder enviar numeros mas grande
-        con menos caracteres, para hacer un mayor aprovechamiento de la velocidad
-        maxima del puerto serie.
-        """
-        return data
-
     def _translate(self, data, in_min, in_max, out_min, out_max):
         """
         Los valores recibidos son enteros de entre 0 y 4096, que corresponden
-        a mediciones de entre 0 y 3.3V, por lo cual, debo convertirlos.
+        a mediciones de entre 0 y 2.9V, por lo cual, debo convertirlos.
         """
         for index, value in enumerate(data):
             data[index] = round((int(value) - in_min) * (out_max - out_min) / (in_max - in_min) + out_min, 2)
@@ -208,14 +203,27 @@ class BasePlot(object):
         """
         Lee desde la comunicacion serie.
         """
-        stream_data = self.stream.readline()
+        stream_data = self.stream.read(100) # Para leer todos los que esten en el buffer
+        stream_data_divided = [stream_data[i:i + 2] for i in range(0, len(stream_data), 2)]
 
-        stream_data = self._format(stream_data)
-        # stream_data = self._decode(stream_data)
-        stream_data = self._validate(stream_data)
-        stream_data = self._translate(stream_data, self.IN_MIN, self.IN_MAX, self.OUT_MIN, self.OUT_MAX)
+        for stream_data in stream_data_divided:
+            stream_data = int.from_bytes(stream_data, byteorder='little')
 
-        return stream_data
+            self.channel_data.append(stream_data)
+
+            if len(self.channel_data) < self.n_plots:
+                continue
+
+            stream_data = self.channel_data
+            self.channel_data = list()
+
+            # stream_data = self._validate(stream_data)
+            stream_data = self._translate(stream_data, self.IN_MIN, self.IN_MAX, self.OUT_MIN, self.OUT_MAX)
+
+            if self.verbose:
+                print(stream_data)
+
+            self._update(stream_data)
 
     def _write_stream(self, text):
         """
@@ -234,8 +242,13 @@ class BasePlot(object):
         """
         Cambia la escala X, para todas las graficas.
         """
+        band = self.samples * ((10000 - band) / 10000)
+
         for plot in self.plots.values():
-            plot.setXRange(0, band)
+            plot.setXRange(self.xlim - band, self.xlim)
+            plot_axis = plot.getAxis("bottom")
+            ticks = [0, 0.5, 1, 1.5, 2, 2.5, 3]
+            plot_axis.setTicks([[(v * 1000, str(v)) for v in ticks ]])
 
     def autorange(self):
         """
@@ -400,24 +413,27 @@ class BasePlot(object):
         de graficas necesarias, con sus correspondientes propiedades.
         """
         for i in range(self.SAVE_RESPONSE):
-            self._read_stream()
+            _ = self._read_stream()
         # Descarta una cierta cantidad de muestras
         # para asegurar que los primeros datos no 
         # influyan en la lectura
 
-        trial_data = self._read_stream()
-
-        for i in range(len(trial_data)):
+        for i in range(self.n_plots):
             self.plots[f"plot_{i}"] = self.layout.addPlot(row=i+1, col=0)
+
+            left_axis = pg.AxisItem(orientation="left", text="Tensión", units="V")
+            left_axis.enableAutoSIPrefix()
+            bottom_axis = pg.AxisItem(orientation="bottom", text="Tiempo", units="s")
+
             new_plot = self.plots[f"plot_{i}"]
-            new_plot.plot(np.zeros(self.samples), name=f"plot_{i}")
+            new_plot.plot(np.zeros(self.samples), name=f"plot_{i}", axisItems={"left": left_axis, "bottom": bottom_axis})
             new_plot.scene().sigMouseClicked.connect(self._on_plot_click)
             new_plot.setLabel("bottom", "Tiempo")
             new_plot.setLabel("left", "Tensión")
             self._set_options(
                 new_plot,
                 **self.kwargs,
-                setMouseEnabled=False,
+                setMouseEnabled=(False, True),
                 setMenuEnabled=True,
                 hideButtons=True,
                 curveClickable=True,
@@ -443,15 +459,15 @@ class BasePlot(object):
         plot.updateItems()
         plot.sigPlotChanged.emit(plot)
 
-    def _update(self):
+    def _update(self, stream_data):
         """
         Funcion invocada en cada actualizacion de la grafica. Toma en cuenta
         el modo en el que esta funcionando.
         """
-        stream_data = self._read_stream()
+        # stream_data = self._read_stream()
 
-        if self.verbose:
-            print(stream_data)
+        # if stream_data == None or stream_data == "":
+            # return None
 
         if self.memory_mode:
             # Reviso si los valores recibidos estan dentro del margen de ruido
@@ -469,28 +485,32 @@ class BasePlot(object):
                 self._update_widget(plot, data)
 
         elif self.mode == self.A_PLUS_B:
-            self._update_widget(
-                list(self.plots.values())[0],
-                str(float(stream_data[0]) + float(stream_data[1]))
-            )
+            if self.n_plots > 1:
+                self._update_widget(
+                    list(self.plots.values())[0],
+                    str(float(stream_data[0]) + float(stream_data[1]))
+                )
 
         elif self.mode == self.A_MINUS_B:
-            self._update_widget(
-                list(self.plots.values())[0],
-                str(float(stream_data[0]) - float(stream_data[1]))
-            )
+            if self.n_plots > 1:
+                self._update_widget(
+                    list(self.plots.values())[0],
+                    str(float(stream_data[0]) - float(stream_data[1]))
+                )
 
         elif self.mode == self.A_X_B:
-            self._update_widget(
-                list(self.plots.values())[0],
-                str(float(stream_data[0]) * float(stream_data[1]))
-            )
+            if self.n_plots > 1:
+                self._update_widget(
+                    list(self.plots.values())[0],
+                    str(float(stream_data[0]) * float(stream_data[1]))
+                )
 
         elif self.mode == self.A_DIV_B:
-            self._update_widget(
-                list(self.plots.values())[0],
-                str(float(stream_data[0]) / float(stream_data[1]))
-            )
+            if self.n_plots > 1:
+                self._update_widget(
+                    list(self.plots.values())[0],
+                    str(float(stream_data[0]) / float(stream_data[1]))
+                )
 
         else:
             print("Fail on ComboBox")
@@ -503,7 +523,7 @@ class BasePlot(object):
         self._plot_init()
 
         self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self._update)
+        self.timer.timeout.connect(self._read_stream)
         self.timer.start(1)
 
         self.addControlsButton()
@@ -520,6 +540,9 @@ class BasePlot(object):
         else:
             self.stream.flushInput() # Descarto todo el contenido acumulado
             self.timer.start()
+        
+        # TODO: Cambiar este metodo para que siga recibiendo muestras pero
+        # no las presente en el widget
 
     def start_memory_mode(self, mode, time):
         """
@@ -547,11 +570,11 @@ class BasePlot(object):
         self.app.exit()
 
 class SerialPlot(BasePlot):
-    def __init__(self, app, com_port, baud_rate, **kwargs):
+    def __init__(self, app, com_port, baud_rate, n_plots, **kwargs):
         self.serial_port = serial.Serial()
         self.serial_port.baudrate = baud_rate
         self.serial_port.port = com_port
         self.serial_port.bytesize = serial.EIGHTBITS
         self.serial_port.parity = serial.PARITY_EVEN
         self.serial_port.stopbits = serial.STOPBITS_ONE
-        super(SerialPlot, self).__init__(app, self.serial_port, **kwargs)
+        super(SerialPlot, self).__init__(app, self.serial_port, n_plots, **kwargs)
