@@ -116,7 +116,8 @@ class ButtonPanel(QWidget):
         # Button Panels
         components.append(self.addComboBox(["Simple", "A + B", "A - B", "A * B", "A / B"], self.on_mode_change))
         # ComboBoxes
-        components.append(self.addDial(1, self.plotWidget.get_samples(), self.change_time))
+        # components.append(self.addDial(1, self.plotWidget.get_samples(), self.change_time))
+        components.append(self.addDial(10, 9990, self.change_time)) # De 10us a 10000us (o 10ms)
         # Dials
 
         main_group, _ = self.addGroupBox("Controles comunes", components)
