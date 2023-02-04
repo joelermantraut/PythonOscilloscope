@@ -31,12 +31,18 @@ class BasePlot(object):
         self.IN_MAX = 4095
         self.OUT_MIN = -3
         self.OUT_MAX = 3
-        self.samples = 10500
+        self.SAMPLES = 2001
+        self.AMP_RANGES = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        self.TIME_RANGES = [10, 1000, 2000, 5000, 6000, 7000, 8000, 9000, 10000]
+        self.AMP_BAND = [0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4, 5, 6]
+        self.TIME_BAND = [2000, 1900, 1800, 1700, 1500, 1000, 500, 200, 50]
+        self.AMP_TEXTS = ["10mV", "20mV", "100mV", "100mV", "200mV", "200mV", "1V", "1V", "1V", "1V", "2V"]
+        self.TIME_TEXTS = ["10us", "1ms", "2ms", "5ms", "6ms", "7ms", "8ms", "9ms", "10ms"]
+        self.CURVE_WIDTH_SENSIBILITY = 5
 
         self.timer = None # Para parar el muestreo
         self.inverted = False
         self.pointsSize = 7
-        self.curve_width_sensibility = 5
         self.fft_mode = False
         self.grid = False
         self.last_name = ""
@@ -107,7 +113,13 @@ class BasePlot(object):
         """
         Devuelve el parametro "samples".
         """
-        return self.samples
+        return self.SAMPLES
+
+    def get_amp_ranges(self):
+        return self.AMP_RANGES, self.AMP_BAND, self.AMP_TEXTS
+    
+    def get_time_ranges(self):
+        return self.TIME_RANGES, self.TIME_BAND, self.TIME_TEXTS
 
     def _set_options(self, plot, **kwargs):
         """
@@ -119,7 +131,7 @@ class BasePlot(object):
 
         if "xlim" in options:
             self.xlim = kwargs["xlim"]
-            self.change_time(kwargs["xlim"])
+            self.change_time(10) # Escala minima
         else:
             plot.enableAutoRange(axis="x")
         # Recibe un valor y setea los limites en el eje X (tiempo)
@@ -145,7 +157,7 @@ class BasePlot(object):
         if "curveClickable" in options:
             plotDataItems = plot.listDataItems()[0]
             # scatterDataItems = plot.listDataItems()[2]
-            plotDataItems.setCurveClickable(True, self.curve_width_sensibility)
+            plotDataItems.setCurveClickable(True, self.CURVE_WIDTH_SENSIBILITY)
             plotDataItems.sigClicked.connect(self._curve_clicked)
 
         if "verbose" in options:
@@ -235,20 +247,19 @@ class BasePlot(object):
         """
         Cambia la escala Y, para la grafica seleccionada.
         """
+        band = self.AMP_BAND[self.AMP_RANGES.index(band)]
+
         plot = list(self.plots.values())[index]
-        plot.setYRange(band[0], band[1])
+        plot.setYRange(-band, band)
 
     def change_time(self, band):
         """
         Cambia la escala X, para todas las graficas.
         """
-        band = self.samples * ((10000 - band) / 10000)
+        band = self.TIME_BAND[self.TIME_RANGES.index(band)]
 
         for plot in self.plots.values():
             plot.setXRange(self.xlim - band, self.xlim)
-            plot_axis = plot.getAxis("bottom")
-            ticks = [0, 0.5, 1, 1.5, 2, 2.5, 3]
-            plot_axis.setTicks([[(v * 1000, str(v)) for v in ticks ]])
 
     def autorange(self):
         """
@@ -421,15 +432,12 @@ class BasePlot(object):
         for i in range(self.n_plots):
             self.plots[f"plot_{i}"] = self.layout.addPlot(row=i+1, col=0)
 
-            left_axis = pg.AxisItem(orientation="left", text="Tensión", units="V")
-            left_axis.enableAutoSIPrefix()
-            bottom_axis = pg.AxisItem(orientation="bottom", text="Tiempo", units="s")
-
             new_plot = self.plots[f"plot_{i}"]
-            new_plot.plot(np.zeros(self.samples), name=f"plot_{i}", axisItems={"left": left_axis, "bottom": bottom_axis})
+            new_plot.plot(np.zeros(self.SAMPLES), name=f"plot_{i}")
             new_plot.scene().sigMouseClicked.connect(self._on_plot_click)
             new_plot.setLabel("bottom", "Tiempo")
             new_plot.setLabel("left", "Tensión")
+            new_plot.showAxes((True, False, False, True), showValues=(True, False, False, False))
             self._set_options(
                 new_plot,
                 **self.kwargs,
@@ -464,11 +472,6 @@ class BasePlot(object):
         Funcion invocada en cada actualizacion de la grafica. Toma en cuenta
         el modo en el que esta funcionando.
         """
-        # stream_data = self._read_stream()
-
-        # if stream_data == None or stream_data == "":
-            # return None
-
         if self.memory_mode:
             # Reviso si los valores recibidos estan dentro del margen de ruido
             if float(stream_data[0]) < 0 and float(stream_data[0]) < -self.NOISE_BAND or \
