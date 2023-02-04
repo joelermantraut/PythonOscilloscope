@@ -6,9 +6,11 @@ from PyQt5.QtWidgets import QApplication
 import sys
 
 def main():
+    port = sys.argv[1]
+
     app = QApplication(sys.argv)
 
-    plot = SerialPlot(app, 'COM10', 9600, verbose=False, xlim=500, ylim=(-1, 1))
+    plot = SerialPlot(app, port, 230400, n_plots=2, verbose=False, xlim=2000, ylim=100)
     buttonPanel = ButtonPanel(plot)
     plot.set_button_panel(buttonPanel)
 
