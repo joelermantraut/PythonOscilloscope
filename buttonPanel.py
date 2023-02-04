@@ -33,9 +33,12 @@ class ButtonPanel(QWidget):
         ]
         self.vbox_panels = list()
         self.labels = [[], []]
+        self.dials_labels = []
         self.visible = True
         self.memory_mode = False
         self.plotWidget.set_button_panel(self)
+        self.AMP_RANGES, self.AMP_BAND, self.AMP_TEXTS = self.plotWidget.get_amp_ranges()
+        self.TIME_RANGES, self.TIME_BAND, self.TIME_TEXTS = self.plotWidget.get_time_ranges()
         self.init_UI(2)
         self.plotWidget.start()
 
@@ -47,6 +50,7 @@ class ButtonPanel(QWidget):
     def addLabel(self, title, color=None):
         label = QLabel(self)
         label.setText(title)
+        label.setAlignment(Qt.AlignCenter)
 
         if color != None:
             label.setStyleSheet(f"background-color: rgb({self.colors[color]})")
@@ -63,12 +67,12 @@ class ButtonPanel(QWidget):
     def addDial(self, range_start, range_end, function):
         dial = QDial(self)
         dial.setRange(range_start, range_end)
-        dial.setValue((range_end - range_start) / 2)
+        dial.setValue(range_start)
         # Centers dial
-        dial.valueChanged[int].connect(function)
+        dial.valueChanged[int].connect(lambda: function(dial))
 
         return dial
-
+    
     def addComboBox(self, items, function):
         combo = QComboBox(self)
         for item in items:
@@ -116,9 +120,10 @@ class ButtonPanel(QWidget):
         # Button Panels
         components.append(self.addComboBox(["Simple", "A + B", "A - B", "A * B", "A / B"], self.on_mode_change))
         # ComboBoxes
-        # components.append(self.addDial(1, self.plotWidget.get_samples(), self.change_time))
         components.append(self.addDial(10, 9990, self.change_time)) # De 10us a 10000us (o 10ms)
         # Dials
+        self.dials_labels.append(self.addLabel(self.TIME_TEXTS[0]))
+        components.append(self.dials_labels[-1])
 
         main_group, _ = self.addGroupBox("Controles comunes", components)
         # Controles globales
@@ -163,9 +168,16 @@ class ButtonPanel(QWidget):
         components.append(self.addButton('Grilla', 'Muestra u oculta la grilla', self.callbacks[index][1]))
         components.append(self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', self.callbacks[index][2]))
         # Button Panels
-        components.append(self.addDial(2, 250, self.callbacks[index][3]))
+        components.append(self.addDial(1, 100, self.callbacks[index][3]))
+        # TODO: Cambiar los limites a valores de 0 a 100 porcentual respecto a los limites de entrada
         # Dials
-        components.append(self.addLabel('Lista de puntos'))
+        self.dials_labels.append(self.addLabel(self.AMP_TEXTS[0]))
+        components.append(self.dials_labels[-1])
+        # Agrego el componente a una lista para modificarlo despues
+        
+        points_list_label = self.addLabel('Lista de puntos')
+        points_list_label.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+        components.append(points_list_label)
 
         groupBox, vbox = self.addGroupBox(title, components)
 
@@ -271,16 +283,50 @@ class ButtonPanel(QWidget):
 
     # Dials Callbacks
 
-    def change_amplitude_0(self, value):
-        self.plotWidget.change_amplitude(0, (-value / 50, value / 50))
-        # Lo divido por 100 porque el rango va de 0 a 250
+    def constrain_value(self, value, ranges):
+        for index in range(len(ranges) - 1):
+            mid_value = (ranges[index + 1] - ranges[index]) / 2 + ranges[index]
+            if value >= ranges[index] and value <= mid_value:
+                value = ranges[index]
+                break
+            elif value > mid_value and value < ranges[index + 1]:
+                value = ranges[index + 1]
+                break
 
-    def change_amplitude_1(self, value):
-        self.plotWidget.change_amplitude(1, (-value / 50, value / 50))
-        # Lo divido por 100 porque el rango va de 0 a 250
+        return value
 
-    def change_time(self, value):
+    def change_time(self, dial):
+        value = dial.value()
+        value = self.constrain_value(value, self.TIME_RANGES)
+
+        dial.setValue(value)
+        # Esta instruccion junto con constrain_value permiten que el
+        # dial tenga un comportamiento discreto
+
+        self.dials_labels[0].setText(str(self.TIME_TEXTS[self.TIME_RANGES.index(value)]))
         self.plotWidget.change_time(value)
+
+    def change_amplitude_0(self, dial):
+        value = dial.value()
+        value = self.constrain_value(value, self.AMP_RANGES)
+
+        dial.setValue(value)
+        # Esta instruccion junto con constrain_value permiten que el
+        # dial tenga un comportamiento discreto
+
+        self.dials_labels[1].setText(str(self.AMP_TEXTS[self.AMP_RANGES.index(value)]))
+        self.plotWidget.change_amplitude(0, value)
+
+    def change_amplitude_1(self, dial):
+        value = dial.value()
+        value = self.constrain_value(value, self.AMP_RANGES)
+
+        dial.setValue(value)
+        # Esta instruccion junto con constrain_value permiten que el
+        # dial tenga un comportamiento discreto
+
+        self.dials_labels[2].setText(str(self.AMP_TEXTS[self.AMP_RANGES.index(value)]))
+        self.plotWidget.change_amplitude(1, value)
 
     # ComboBoxes Callbacks
 
