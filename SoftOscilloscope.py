@@ -2,6 +2,7 @@ import serial, sys
 from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 import pyqtgraph as pg
 import numpy as np
+import numpy.fft as fft
 
 class TimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
@@ -31,14 +32,15 @@ class BasePlot(object):
         self.IN_MAX = 4095
         self.OUT_MIN = -3
         self.OUT_MAX = 3
-        self.SAMPLES = 2001
+        self.SAMPLES = 3501
         self.AMP_RANGES = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
         self.TIME_RANGES = [10, 1000, 2000, 5000, 6000, 7000, 8000, 9000, 10000]
         self.AMP_BAND = [0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4, 5, 6]
-        self.TIME_BAND = [2000, 1900, 1800, 1700, 1500, 1000, 500, 200, 50]
+        self.TIME_BAND = [3500, 1400, 700, 3500, 1400, 700, 350, 140, 70]
         self.AMP_TEXTS = ["10mV", "20mV", "100mV", "100mV", "200mV", "200mV", "1V", "1V", "1V", "1V", "2V"]
-        self.TIME_TEXTS = ["10us", "1ms", "2ms", "5ms", "6ms", "7ms", "8ms", "9ms", "10ms"]
+        self.TIME_TEXTS = ["500ms", "200ms", "100ms", "50ms", "20ms", "10ms", "5ms", "2ms", "1ms"]
         self.CURVE_WIDTH_SENSIBILITY = 5
+        self.MAX_POINTS_IN_LIST = 1024
 
         self.timer = None # Para parar el muestreo
         self.inverted = False
@@ -56,6 +58,9 @@ class BasePlot(object):
         self.memory_mode_time = 0
         self.channel_data = list()
         self.xlim = 0
+        self.points = [np.zeros(self.MAX_POINTS_IN_LIST)] * self.n_plots
+        self.points_pointer = 0
+        self.running = True
 
         self.initUI()
 
@@ -156,7 +161,6 @@ class BasePlot(object):
 
         if "curveClickable" in options:
             plotDataItems = plot.listDataItems()[0]
-            # scatterDataItems = plot.listDataItems()[2]
             plotDataItems.setCurveClickable(True, self.CURVE_WIDTH_SENSIBILITY)
             plotDataItems.sigClicked.connect(self._curve_clicked)
 
@@ -184,6 +188,26 @@ class BasePlot(object):
 
         self.stream.close()
         print("Stream closed")
+
+    def add_array(self, point):
+        for i in range(self.n_plots):
+            self.points[i][self.points_pointer] = point[i]
+
+        self.points_pointer = (self.points_pointer + 1) % self.MAX_POINTS_IN_LIST
+
+        peaks_list = list()
+        freqs_list = list()
+        for i in range(self.n_plots):
+            peaks_list.append(self.points[i].max())
+
+            spectrum = fft.fft(self.points[i])
+            freq = fft.fftfreq(len(spectrum))
+            threshold = 0.5 * max(abs(spectrum))
+            mask = abs(spectrum) > threshold
+            freqs_list.extend(freq[mask])
+
+        self.buttonPanel.update_peaks(peaks_list)
+        self.buttonPanel.update_freqs(freqs_list)
 
     def _translate(self, data, in_min, in_max, out_min, out_max):
         """
@@ -215,11 +239,16 @@ class BasePlot(object):
         """
         Lee desde la comunicacion serie.
         """
+
         stream_data = self.stream.read(100) # Para leer todos los que esten en el buffer
+
+        if not self.running:
+            return
+
         stream_data_divided = [stream_data[i:i + 2] for i in range(0, len(stream_data), 2)]
 
         for stream_data in stream_data_divided:
-            stream_data = int.from_bytes(stream_data, byteorder='little')
+            stream_data = int.from_bytes(stream_data, byteorder='big')
 
             self.channel_data.append(stream_data)
 
@@ -231,6 +260,8 @@ class BasePlot(object):
 
             # stream_data = self._validate(stream_data)
             stream_data = self._translate(stream_data, self.IN_MIN, self.IN_MAX, self.OUT_MIN, self.OUT_MAX)
+
+            self.add_array(stream_data)
 
             if self.verbose:
                 print(stream_data)
@@ -333,12 +364,16 @@ class BasePlot(object):
             curve = plot.listDataItems()[0]
             curve.setFftMode(self.fft_mode)
 
+            if self.fft_mode:
+                plot.showAxes((True, False, False, True), showValues=(True, False, False, True))
+            else:
+                plot.showAxes((True, False, False, True), showValues=(True, False, False, False))
+            # Agrega o quita los numeros de los ejes
+
     def _get_plot_info(self, plot):
         """
         Devuelve informacion basica de una de las graficas.
         """
-        geo = plot.viewGeometry()
-
         bottom = plot.getAxis('bottom')
         left = plot.getAxis('left')
 
@@ -538,15 +573,13 @@ class BasePlot(object):
         """
         Funcion que frena o reiniciar la adquisicion de datos.
         """
-        if self.timer.isActive():
-            self.timer.stop()
-        else:
-            self.stream.flushInput() # Descarto todo el contenido acumulado
-            self.timer.start()
+        self.running = not self.running
+        # if self.timer.isActive():
+        #     self.timer.stop()
+        # else:
+        #     self.stream.flushInput() # Descarto todo el contenido acumulado
+        #     self.timer.start()
         
-        # TODO: Cambiar este metodo para que siga recibiendo muestras pero
-        # no las presente en el widget
-
     def start_memory_mode(self, mode, time):
         """
         Funcion que inicia el modo de memoria que permite capturar

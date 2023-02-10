@@ -67,7 +67,7 @@ class ButtonPanel(QWidget):
     def addDial(self, range_start, range_end, function):
         dial = QDial(self)
         dial.setRange(range_start, range_end)
-        dial.setValue(range_start)
+        dial.setValue(range_end)
         # Centers dial
         dial.valueChanged[int].connect(lambda: function(dial))
 
@@ -143,14 +143,41 @@ class ButtonPanel(QWidget):
             grid.addWidget(self.canals[canal_index], 0, canal_index + 1)
         # Canales
 
-        grid.addWidget(self.addLabel("Disparo"), 1, 0)
-        grid.addWidget(self.trigger_slider, 2, 0)
+        label_tension = self.addLabel("Tension")
+        grid.addWidget(label_tension, 1, 0)
+        label_frecuencia = self.addLabel("Frecuencia")
+        grid.addWidget(label_frecuencia, 2, 0)
+
+        label_tension.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+        label_frecuencia.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+
+        self.indicador_tension_canal_A = self.addLabel("0V")
+        self.indicador_tension_canal_B = self.addLabel("0V")
+        self.indicador_frecuencia_canal_A = self.addLabel("0Hz")
+        self.indicador_frecuencia_canal_B = self.addLabel("0Hz")
+
+        grid.addWidget(self.indicador_tension_canal_A, 1, 1)
+        grid.addWidget(self.indicador_tension_canal_B, 1, 2)
+        grid.addWidget(self.indicador_frecuencia_canal_A, 2, 1)
+        grid.addWidget(self.indicador_frecuencia_canal_B, 2, 2)
+
+        self.indicador_tension_canal_A.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+        self.indicador_tension_canal_B.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+        self.indicador_frecuencia_canal_A.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+        self.indicador_frecuencia_canal_B.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+        # Indicadores de frecuencia y tension
+
+        label_disparo = self.addLabel("Disparo")
+        label_disparo.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
+        grid.addWidget(label_disparo, 3, 0)
+        grid.addWidget(self.trigger_slider, 4, 0)
+        # Control de disparo
         
-        grid.addWidget(self.addLabel('Modo memoria'), 3, 0)
+        grid.addWidget(self.addLabel('Modo memoria'), 5, 0)
         self.max_time_line_edit = self.addLineEdit(self.change_max_time_line_edit)
-        grid.addWidget(self.max_time_line_edit, 4, 0)
+        grid.addWidget(self.max_time_line_edit, 6, 0)
         self.init_memory_mode_btn = self.addButton('Comenzar', 'Este boton comienza con el modo memoria', self.start_memory_mode)
-        grid.addWidget(self.init_memory_mode_btn, 4, 1)
+        grid.addWidget(self.init_memory_mode_btn, 6, 1)
         # Modo memoria
 
         self.setLayout(grid)
@@ -327,6 +354,14 @@ class ButtonPanel(QWidget):
 
         self.dials_labels[2].setText(str(self.AMP_TEXTS[self.AMP_RANGES.index(value)]))
         self.plotWidget.change_amplitude(1, value)
+        
+    def update_peaks(self, peaks_lists):
+        self.indicador_tension_canal_A.setText(str(peaks_lists[0]) + " V")
+        self.indicador_tension_canal_B.setText(str(peaks_lists[1]) + " V")
+
+    def update_freqs(self, freqs_lists):
+        self.indicador_frecuencia_canal_A.setText(str(freqs_lists[0]) + " Hz")
+        self.indicador_frecuencia_canal_B.setText(str(freqs_lists[1]) + " Hz")
 
     # ComboBoxes Callbacks
 
