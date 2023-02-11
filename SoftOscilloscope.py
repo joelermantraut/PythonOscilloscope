@@ -30,15 +30,15 @@ class BasePlot(object):
         self.A_DIV_B = 4
         self.IN_MIN = 0
         self.IN_MAX = 4095
-        self.OUT_MIN = -3
-        self.OUT_MAX = 3
-        self.SAMPLES = 3501
+        self.OUT_MIN = -3.5
+        self.OUT_MAX = 3.5
+        self.SAMPLES = 7001
         self.AMP_RANGES = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-        self.TIME_RANGES = [10, 1000, 2000, 5000, 6000, 7000, 8000, 9000, 10000]
+        self.TIME_RANGES = [10, 1000, 2000, 5000, 6000, 7000]
         self.AMP_BAND = [0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4, 5, 6]
-        self.TIME_BAND = [3500, 1400, 700, 3500, 1400, 700, 350, 140, 70]
+        self.TIME_BAND = [3360, 1344, 670, 334, 133, 65]
         self.AMP_TEXTS = ["10mV", "20mV", "100mV", "100mV", "200mV", "200mV", "1V", "1V", "1V", "1V", "2V"]
-        self.TIME_TEXTS = ["500ms", "200ms", "100ms", "50ms", "20ms", "10ms", "5ms", "2ms", "1ms"]
+        self.TIME_TEXTS = ["50ms", "20ms", "10ms", "5ms", "2ms", "1ms"]
         self.CURVE_WIDTH_SENSIBILITY = 5
         self.MAX_POINTS_IN_LIST = 1024
 
@@ -248,7 +248,7 @@ class BasePlot(object):
         stream_data_divided = [stream_data[i:i + 2] for i in range(0, len(stream_data), 2)]
 
         for stream_data in stream_data_divided:
-            stream_data = int.from_bytes(stream_data, byteorder='big')
+            stream_data = int.from_bytes(stream_data, byteorder='little')
 
             self.channel_data.append(stream_data)
 
