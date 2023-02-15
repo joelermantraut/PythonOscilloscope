@@ -7,10 +7,15 @@ import sys
 import serial.tools.list_ports
 
 def get_device_port():
+    """
+    Esta funcion se conecta automaticamente al puerto que tiene un dispositivo
+    con el modelo "CP210x" conectado. Este corresponde al modulo USB que estamos
+    utilizando para conectar el puerto serie de la STM.
+    """
     available_ports = [
         p.device
         for p in serial.tools.list_ports.comports()
-        if 'CH340' in p.description  # may need tweaking to match new arduinos
+        if 'CP210x' in p.description  # may need tweaking to match new arduinos
     ]
     if not available_ports:
         raise IOError("No available port found")
@@ -24,7 +29,7 @@ def main():
 
     app = QApplication(sys.argv)
 
-    plot = SerialPlot(app, port, 230400, n_plots=2, verbose=False, xlim=7001, ylim=100)
+    plot = SerialPlot(app, port, 230400, n_plots=2, verbose=False, xlim=7001, ylim=80)
     buttonPanel = ButtonPanel(plot)
     plot.set_button_panel(buttonPanel)
 
