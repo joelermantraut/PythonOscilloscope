@@ -34,7 +34,7 @@ class BasePlot(object):
         self.OUT_MAX = 3.4
         self.SAMPLES = 7001
         self.AMP_RANGES = [1, 10, 20, 30, 40, 50, 60, 70, 80]
-        self.TIME_RANGES = [10, 1000, 2000, 5000, 6000, 7000]
+        self.TIME_RANGES = [10, 1000, 2000, 3000, 4000, 5000]
         self.AMP_BAND = [0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4]
         self.TIME_BAND = [3310, 1365, 695, 352, 140, 70]
         self.AMP_TEXTS = ["10mV", "20mV", "50mv", "100mV", "200mV", "500mV", "1V", "2V", "3V"]
@@ -217,26 +217,10 @@ class BasePlot(object):
     def _translate(self, data, in_min, in_max, out_min, out_max):
         """
         Los valores recibidos son enteros de entre 0 y 4096, que corresponden
-        a mediciones de entre 0 y 2.9V, por lo cual, debo convertirlos.
+        a mediciones de entre 0 y 3.3V, por lo cual, debo convertirlos.
         """
         for index, value in enumerate(data):
             data[index] = round((int(value) - in_min) * (out_max - out_min) / (in_max - in_min) + out_min, 2)
-
-        return data
-
-    def _validate(self, data):
-        """
-        Valida el dato recibido. Este metodo se aplica
-        porque a mucha velocidad, a veces algunos datos se
-        puede perder o corromper.
-
-        De paso, convierte los valores de cadenas a enteros.
-        """
-        for index, item in enumerate(data):
-            try:
-                data[index] = int(item)
-            except:
-                return ""
 
         return data
 
@@ -254,6 +238,8 @@ class BasePlot(object):
             if stream_data > self.IN_MAX or stream_data < self.IN_MIN:
                 self.stream.flushInput()
                 break
+            # Limpia el buffer cada vez que encuentra un error. Evita que
+            # el error se propague en la grafica o se desfasen las muestras
             
             self.channel_data.append(stream_data)
 
@@ -263,7 +249,6 @@ class BasePlot(object):
             stream_data = self.channel_data
             self.channel_data = list()
 
-            # stream_data = self._validate(stream_data)
             stream_data = self._translate(stream_data, self.IN_MIN, self.IN_MAX, self.OUT_MIN, self.OUT_MAX)
 
             self.add_array(stream_data)
@@ -287,7 +272,6 @@ class BasePlot(object):
 
         plot = list(self.plots.values())[index]
         plot.setYRange(-band, band)
-        # plot.setLimits(yMin=-band, yMax=band)
 
     def change_time(self, band):
         """
@@ -295,14 +279,10 @@ class BasePlot(object):
         """
         index = self.TIME_RANGES.index(band)
         band = self.TIME_BAND[index]
-        tick_spacing = self.TIME_TICK_SPACING[index]
 
         for plot in self.plots.values():
             plot.setXRange(self.xlim - band, self.xlim)
-            # plot.setLimits(xMin=self.xlim - band, xMax=self.xlim)
-            # ticks = [(item, "1") for item in range(0, band, band // 5)]
-            # ticks.reverse()
-            plot.getAxis("bottom").setTickSpacing(major=band//10, minor=1)
+            plot.getAxis("bottom").setTickSpacing(major=band // 10, minor=1)
 
     def autorange(self):
         """
@@ -485,7 +465,6 @@ class BasePlot(object):
             new_plot.setLabel("bottom", "Tiempo")
             new_plot.setLabel("left", "Tensión")
             new_plot.showAxes((True, False, False, True), showValues=(True, False, False, False))
-            # new_plot.setAspectLocked(lock=True, ratio=1)
             new_plot.setXRange(0, 7000)
             new_plot.setYRange(-3, 3)
             self._set_options(
