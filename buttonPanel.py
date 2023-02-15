@@ -122,7 +122,7 @@ class ButtonPanel(QWidget):
         # ComboBoxes
         components.append(self.addDial(self.TIME_RANGES[0], self.TIME_RANGES[-1], self.change_time)) # De 10us a 10000us (o 10ms)
         # Dials
-        self.dials_labels.append(self.addLabel(self.TIME_TEXTS[0]))
+        self.dials_labels.append(self.addLabel(self.TIME_TEXTS[-1]))
         components.append(self.dials_labels[-1])
 
         main_group, _ = self.addGroupBox("Controles comunes", components)
@@ -133,8 +133,6 @@ class ButtonPanel(QWidget):
             self.canals.append(self.add_panel(f"Canal {chr(65 + i)}", i))
             # El indice del canal se describe con letras mayusculas
         # Genera los paneles
-
-        self.trigger_slider = self.addSlider(1, 1000, self.slider_change_value)
 
         grid = QGridLayout()
 
@@ -166,12 +164,6 @@ class ButtonPanel(QWidget):
         self.indicador_frecuencia_canal_A.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
         self.indicador_frecuencia_canal_B.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
         # Indicadores de frecuencia y tension
-
-        label_disparo = self.addLabel("Disparo")
-        label_disparo.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
-        grid.addWidget(label_disparo, 3, 0)
-        grid.addWidget(self.trigger_slider, 4, 0)
-        # Control de disparo
         
         grid.addWidget(self.addLabel('Modo memoria'), 5, 0)
         self.max_time_line_edit = self.addLineEdit(self.change_max_time_line_edit)
@@ -198,7 +190,7 @@ class ButtonPanel(QWidget):
         components.append(self.addDial(self.AMP_RANGES[0], self.AMP_RANGES[-1], self.callbacks[index][3]))
         # TODO: Cambiar los limites a valores de 0 a 100 porcentual respecto a los limites de entrada
         # Dials
-        self.dials_labels.append(self.addLabel(self.AMP_TEXTS[0]))
+        self.dials_labels.append(self.addLabel(self.AMP_TEXTS[-1]))
         components.append(self.dials_labels[-1])
         # Agrego el componente a una lista para modificarlo despues
         
@@ -240,7 +232,8 @@ class ButtonPanel(QWidget):
 
     @pyqtSlot()
     def autorange(self):
-        self.plotWidget.autorange()
+        # self.plotWidget.autorange()
+        pass
 
     @pyqtSlot()
     def invert_Y_0(self):
@@ -356,12 +349,12 @@ class ButtonPanel(QWidget):
         self.plotWidget.change_amplitude(1, value)
         
     def update_peaks(self, peaks_lists):
-        self.indicador_tension_canal_A.setText(str(peaks_lists[0]) + " V")
-        self.indicador_tension_canal_B.setText(str(peaks_lists[1]) + " V")
+        self.indicador_tension_canal_A.setText(str(abs(peaks_lists[0])) + " V")
+        self.indicador_tension_canal_B.setText(str(abs(peaks_lists[1])) + " V")
 
     def update_freqs(self, freqs_lists):
-        freqs_lists[0] = round((freqs_lists[0] - (freqs_lists[0] * 0.25)) * 10000, 2)
-        freqs_lists[1] = round((freqs_lists[1] - (freqs_lists[1] * 0.25)) * 10000, 2)
+        freqs_lists[0] = abs(round((freqs_lists[0] - (freqs_lists[0] * 0.25)) * 10000, 2))
+        freqs_lists[1] = abs(round((freqs_lists[1] - (freqs_lists[1] * 0.25)) * 10000, 2))
         self.indicador_frecuencia_canal_A.setText(str(freqs_lists[0]) + " Hz")
         self.indicador_frecuencia_canal_B.setText(str(freqs_lists[1]) + " Hz")
 

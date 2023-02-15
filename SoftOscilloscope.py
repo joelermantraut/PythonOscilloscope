@@ -39,8 +39,6 @@ class BasePlot(object):
         self.TIME_BAND = [3310, 1365, 695, 352, 140, 70]
         self.AMP_TEXTS = ["10mV", "20mV", "50mv", "100mV", "200mV", "500mV", "1V", "2V", "3V"]
         self.TIME_TEXTS = ["50ms", "20ms", "10ms", "5ms", "2ms", "1ms"]
-        self.AMP_TICK_SPACING = [0.01, 0.02, 0.1, 0.2, 0.5, 1, 2, 3]
-        self.TIME_TICK_SPACING = [10 for _ in self.TIME_RANGES]
         self.CURVE_WIDTH_SENSIBILITY = 5
         self.MAX_POINTS_IN_LIST = 1024
         self.FFT_THRESHOLD = 0.3
@@ -48,10 +46,10 @@ class BasePlot(object):
         self.BYTES_SERIAL_READ = 100
 
         self.timer = None # Para parar el muestreo
-        self.inverted = False
+        self.inverted = [False for _ in range(self.n_plots)]
+        self.grid = [True for _ in range(self.n_plots)]
         self.pointsSize = 7
         self.fft_mode = False
-        self.grid = False
         self.last_name = ""
         self.point_color_index = -1 # -1 para que el conteo arranque en 0
         self.limit_scatter_points = 10
@@ -65,6 +63,8 @@ class BasePlot(object):
         self.xlim = 0
         self.points = [np.zeros(self.MAX_POINTS_IN_LIST) for _ in range(self.n_plots)]
         self.points_pointer = 0
+        self.freqs_lists = list()
+        self.peaks_lists = list()
 
         self.initUI()
 
@@ -129,6 +129,12 @@ class BasePlot(object):
     
     def get_time_ranges(self):
         return self.TIME_RANGES, self.TIME_BAND, self.TIME_TEXTS
+
+    def get_freq(self):
+        return self.freqs_lists
+    
+    def get_peaks(self):
+        return self.peaks_lists
 
     def _set_options(self, plot, **kwargs):
         """
@@ -199,20 +205,21 @@ class BasePlot(object):
 
         self.points_pointer = (self.points_pointer + 1) % self.MAX_POINTS_IN_LIST
 
-        peaks_list = list()
-        freqs_list = list()
+        self.peaks_lists = list()
+        self.freqs_lists = list()
         for i in range(self.n_plots):
-            peaks_list.append(self.points[i].max())
+            self.peaks_lists.append(self.points[i].max())
 
             spectrum = fft.fft(self.points[i])
             freq = fft.fftfreq(len(spectrum))
             threshold = self.FFT_THRESHOLD * max(abs(spectrum))
             mask = abs(spectrum) > threshold
-            freqs_list.append(freq[mask][0])
+            if len(freq[mask]) > 0:
+                self.freqs_lists.append(freq[mask][0])
             # Obtiene la frecuencia dominante
 
-        self.buttonPanel.update_peaks(peaks_list)
-        self.buttonPanel.update_freqs(freqs_list)
+        self.buttonPanel.update_peaks(self.peaks_lists)
+        self.buttonPanel.update_freqs(self.freqs_lists)
 
     def _translate(self, data, in_min, in_max, out_min, out_max):
         """
@@ -296,10 +303,10 @@ class BasePlot(object):
         """
         Invierte el eje de la grafica seleccionada.
         """
-        self.inverted = not self.inverted
+        self.inverted[index] = not self.inverted[index]
 
         plot = list(self.plots.values())[index]
-        plot.invertY(self.inverted)
+        plot.invertY(self.inverted[index])
 
     def change_trigger_freq(self, value):
         self.timer.setInterval(value)
@@ -333,10 +340,10 @@ class BasePlot(object):
         """
         Alterna la visibilidad de la grilla.
         """
-        self.grid = not self.grid
+        self.grid[index] = not self.grid[index]
 
         plot = list(self.plots.values())[index]
-        plot.showGrid(self.grid, self.grid, alpha=255)
+        plot.showGrid(self.grid[index], self.grid[index], alpha=255)
 
     def delete_all(self, index):
         """
@@ -465,8 +472,7 @@ class BasePlot(object):
             new_plot.setLabel("bottom", "Tiempo")
             new_plot.setLabel("left", "Tensión")
             new_plot.showAxes((True, False, False, True), showValues=(True, False, False, False))
-            new_plot.setXRange(0, 7000)
-            new_plot.setYRange(-3, 3)
+            new_plot.showGrid(True, True, 255)
             self._set_options(
                 new_plot,
                 **self.kwargs,
