@@ -30,17 +30,22 @@ class BasePlot(object):
         self.A_DIV_B = 4
         self.IN_MIN = 0
         self.IN_MAX = 4095
-        self.OUT_MIN = -3.5
-        self.OUT_MAX = 3.5
+        self.OUT_MIN = -3.6
+        self.OUT_MAX = 3.4
         self.SAMPLES = 7001
-        self.AMP_RANGES = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        self.AMP_RANGES = [1, 10, 20, 30, 40, 50, 60, 70, 80]
         self.TIME_RANGES = [10, 1000, 2000, 5000, 6000, 7000]
-        self.AMP_BAND = [0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4, 5, 6]
-        self.TIME_BAND = [3360, 1344, 670, 334, 133, 65]
-        self.AMP_TEXTS = ["10mV", "20mV", "100mV", "100mV", "200mV", "200mV", "1V", "1V", "1V", "1V", "2V"]
+        self.AMP_BAND = [0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 3, 4]
+        self.TIME_BAND = [3310, 1365, 695, 352, 140, 70]
+        self.AMP_TEXTS = ["10mV", "20mV", "50mv", "100mV", "200mV", "500mV", "1V", "2V", "3V"]
         self.TIME_TEXTS = ["50ms", "20ms", "10ms", "5ms", "2ms", "1ms"]
+        self.AMP_TICK_SPACING = [0.01, 0.02, 0.1, 0.2, 0.5, 1, 2, 3]
+        self.TIME_TICK_SPACING = [10 for _ in self.TIME_RANGES]
         self.CURVE_WIDTH_SENSIBILITY = 5
         self.MAX_POINTS_IN_LIST = 1024
+        self.FFT_THRESHOLD = 0.3
+        self.BYTE_ORDER = "little"
+        self.BYTES_SERIAL_READ = 100
 
         self.timer = None # Para parar el muestreo
         self.inverted = False
@@ -58,9 +63,8 @@ class BasePlot(object):
         self.memory_mode_time = 0
         self.channel_data = list()
         self.xlim = 0
-        self.points = [np.zeros(self.MAX_POINTS_IN_LIST)] * self.n_plots
+        self.points = [np.zeros(self.MAX_POINTS_IN_LIST) for _ in range(self.n_plots)]
         self.points_pointer = 0
-        self.running = True
 
         self.initUI()
 
@@ -202,9 +206,10 @@ class BasePlot(object):
 
             spectrum = fft.fft(self.points[i])
             freq = fft.fftfreq(len(spectrum))
-            threshold = 0.5 * max(abs(spectrum))
+            threshold = self.FFT_THRESHOLD * max(abs(spectrum))
             mask = abs(spectrum) > threshold
-            freqs_list.extend(freq[mask])
+            freqs_list.append(freq[mask][0])
+            # Obtiene la frecuencia dominante
 
         self.buttonPanel.update_peaks(peaks_list)
         self.buttonPanel.update_freqs(freqs_list)
@@ -239,17 +244,17 @@ class BasePlot(object):
         """
         Lee desde la comunicacion serie.
         """
-
-        stream_data = self.stream.read(100) # Para leer todos los que esten en el buffer
-
-        if not self.running:
-            return
+        stream_data = self.stream.read(self.BYTES_SERIAL_READ) # Para leer todos los que esten en el buffer
 
         stream_data_divided = [stream_data[i:i + 2] for i in range(0, len(stream_data), 2)]
 
         for stream_data in stream_data_divided:
-            stream_data = int.from_bytes(stream_data, byteorder='little')
+            stream_data = int.from_bytes(stream_data, self.BYTE_ORDER)
 
+            if stream_data > self.IN_MAX or stream_data < self.IN_MIN:
+                self.stream.flushInput()
+                break
+            
             self.channel_data.append(stream_data)
 
             if len(self.channel_data) < self.n_plots:
@@ -282,15 +287,22 @@ class BasePlot(object):
 
         plot = list(self.plots.values())[index]
         plot.setYRange(-band, band)
+        # plot.setLimits(yMin=-band, yMax=band)
 
     def change_time(self, band):
         """
         Cambia la escala X, para todas las graficas.
         """
-        band = self.TIME_BAND[self.TIME_RANGES.index(band)]
+        index = self.TIME_RANGES.index(band)
+        band = self.TIME_BAND[index]
+        tick_spacing = self.TIME_TICK_SPACING[index]
 
         for plot in self.plots.values():
             plot.setXRange(self.xlim - band, self.xlim)
+            # plot.setLimits(xMin=self.xlim - band, xMax=self.xlim)
+            # ticks = [(item, "1") for item in range(0, band, band // 5)]
+            # ticks.reverse()
+            plot.getAxis("bottom").setTickSpacing(major=band//10, minor=1)
 
     def autorange(self):
         """
@@ -344,7 +356,7 @@ class BasePlot(object):
         self.grid = not self.grid
 
         plot = list(self.plots.values())[index]
-        plot.showGrid(self.grid, self.grid)
+        plot.showGrid(self.grid, self.grid, alpha=255)
 
     def delete_all(self, index):
         """
@@ -473,6 +485,9 @@ class BasePlot(object):
             new_plot.setLabel("bottom", "Tiempo")
             new_plot.setLabel("left", "Tensión")
             new_plot.showAxes((True, False, False, True), showValues=(True, False, False, False))
+            # new_plot.setAspectLocked(lock=True, ratio=1)
+            new_plot.setXRange(0, 7000)
+            new_plot.setYRange(-3, 3)
             self._set_options(
                 new_plot,
                 **self.kwargs,
@@ -573,12 +588,11 @@ class BasePlot(object):
         """
         Funcion que frena o reiniciar la adquisicion de datos.
         """
-        self.running = not self.running
-        # if self.timer.isActive():
-        #     self.timer.stop()
-        # else:
-        #     self.stream.flushInput() # Descarto todo el contenido acumulado
-        #     self.timer.start()
+        if self.timer.isActive():
+            self.timer.stop()
+        else:
+            self.stream.flushInput() # Descarto todo el contenido acumulado
+            self.timer.start()
         
     def start_memory_mode(self, mode, time):
         """
@@ -613,4 +627,5 @@ class SerialPlot(BasePlot):
         self.serial_port.bytesize = serial.EIGHTBITS
         self.serial_port.parity = serial.PARITY_EVEN
         self.serial_port.stopbits = serial.STOPBITS_ONE
+        self.serial_port.timeout = 0.05
         super(SerialPlot, self).__init__(app, self.serial_port, n_plots, **kwargs)
