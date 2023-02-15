@@ -120,7 +120,7 @@ class ButtonPanel(QWidget):
         # Button Panels
         components.append(self.addComboBox(["Simple", "A + B", "A - B", "A * B", "A / B"], self.on_mode_change))
         # ComboBoxes
-        components.append(self.addDial(10, 9990, self.change_time)) # De 10us a 10000us (o 10ms)
+        components.append(self.addDial(self.TIME_RANGES[0], self.TIME_RANGES[-1], self.change_time)) # De 10us a 10000us (o 10ms)
         # Dials
         self.dials_labels.append(self.addLabel(self.TIME_TEXTS[0]))
         components.append(self.dials_labels[-1])
@@ -195,7 +195,7 @@ class ButtonPanel(QWidget):
         components.append(self.addButton('Grilla', 'Muestra u oculta la grilla', self.callbacks[index][1]))
         components.append(self.addButton('Borrar puntos', 'Borra todos los puntos manuales en la grafica', self.callbacks[index][2]))
         # Button Panels
-        components.append(self.addDial(1, 100, self.callbacks[index][3]))
+        components.append(self.addDial(self.AMP_RANGES[0], self.AMP_RANGES[-1], self.callbacks[index][3]))
         # TODO: Cambiar los limites a valores de 0 a 100 porcentual respecto a los limites de entrada
         # Dials
         self.dials_labels.append(self.addLabel(self.AMP_TEXTS[0]))
@@ -360,6 +360,8 @@ class ButtonPanel(QWidget):
         self.indicador_tension_canal_B.setText(str(peaks_lists[1]) + " V")
 
     def update_freqs(self, freqs_lists):
+        freqs_lists[0] = round((freqs_lists[0] - (freqs_lists[0] * 0.25)) * 10000, 2)
+        freqs_lists[1] = round((freqs_lists[1] - (freqs_lists[1] * 0.25)) * 10000, 2)
         self.indicador_frecuencia_canal_A.setText(str(freqs_lists[0]) + " Hz")
         self.indicador_frecuencia_canal_B.setText(str(freqs_lists[1]) + " Hz")
 
