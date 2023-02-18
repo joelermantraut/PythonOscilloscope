@@ -1,11 +1,10 @@
-import sys
-from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QDial,
-                             QMessageBox, QComboBox, QGroupBox, QVBoxLayout,
+from PyQt5.QtWidgets import (QWidget, QPushButton, QDial,
+                             QComboBox, QGroupBox, QVBoxLayout,
                              QGridLayout, QLabel, QLineEdit, QSlider)
-from PyQt5.QtGui import QIcon, QIntValidator
+from PyQt5.QtGui import QIntValidator
 from PyQt5.QtCore import pyqtSlot, Qt
-from PyQt5 import QtCore
 import numpy as np
+from math import sqrt
 
 class ButtonPanel(QWidget):
 
@@ -141,7 +140,7 @@ class ButtonPanel(QWidget):
             grid.addWidget(self.canals[canal_index], 0, canal_index + 1)
         # Canales
 
-        label_tension = self.addLabel("Tension")
+        label_tension = self.addLabel("Vpico\nVpp\nVrms")
         grid.addWidget(label_tension, 1, 0)
         label_frecuencia = self.addLabel("Frecuencia")
         grid.addWidget(label_frecuencia, 2, 0)
@@ -165,11 +164,11 @@ class ButtonPanel(QWidget):
         self.indicador_frecuencia_canal_B.setStyleSheet("border-top: 1px solid black;padding: .25em 0")
         # Indicadores de frecuencia y tension
         
-        grid.addWidget(self.addLabel('Modo memoria'), 5, 0)
+        grid.addWidget(self.addLabel('Modo memoria'), 3, 0)
         self.max_time_line_edit = self.addLineEdit(self.change_max_time_line_edit)
-        grid.addWidget(self.max_time_line_edit, 6, 0)
+        grid.addWidget(self.max_time_line_edit, 5, 0)
         self.init_memory_mode_btn = self.addButton('Comenzar', 'Este boton comienza con el modo memoria', self.start_memory_mode)
-        grid.addWidget(self.init_memory_mode_btn, 6, 1)
+        grid.addWidget(self.init_memory_mode_btn, 5, 1)
         # Modo memoria
 
         self.setLayout(grid)
@@ -232,8 +231,7 @@ class ButtonPanel(QWidget):
 
     @pyqtSlot()
     def autorange(self):
-        # self.plotWidget.autorange()
-        pass
+        self.plotWidget.autorange()
 
     @pyqtSlot()
     def invert_Y_0(self):
@@ -349,12 +347,21 @@ class ButtonPanel(QWidget):
         self.plotWidget.change_amplitude(1, value)
         
     def update_peaks(self, peaks_lists):
-        self.indicador_tension_canal_A.setText(str(abs(peaks_lists[0])) + " V")
-        self.indicador_tension_canal_B.setText(str(abs(peaks_lists[1])) + " V")
+        vp0 = round(peaks_lists[0], 2)
+        vpp0 = round(vp0 * 2, 2)
+        vrms0 = round(vp0 / sqrt(2), 2)
+
+        vp1 = round(peaks_lists[1], 2)
+        vpp1 = round(vp1 * 2, 2)
+        vrms1 = round(vp1 / sqrt(2), 2)
+
+        self.indicador_tension_canal_A.setText(str(vp0) + " Vp\n" + str(vpp0) + " Vpp\n" + str(vrms0) + " Vrms")
+        self.indicador_tension_canal_B.setText(str(vp1) + " Vp\n" + str(vpp1) + " Vpp\n" + str(vrms1) + " Vrms")
 
     def update_freqs(self, freqs_lists):
-        freqs_lists[0] = abs(round((freqs_lists[0] - (freqs_lists[0] * 0.25)) * 10000, 2))
-        freqs_lists[1] = abs(round((freqs_lists[1] - (freqs_lists[1] * 0.25)) * 10000, 2))
+        freqs_lists[0] = abs(round(freqs_lists[0] * 10000, 2))
+        freqs_lists[1] = abs(round(freqs_lists[1] * 10000, 2))
+        # Se multiplica por 10000 por el calculo da en 1/10 MHz
         self.indicador_frecuencia_canal_A.setText(str(freqs_lists[0]) + " Hz")
         self.indicador_frecuencia_canal_B.setText(str(freqs_lists[1]) + " Hz")
 

@@ -1,12 +1,8 @@
 import serial, sys
-from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
+from pyqtgraph.Qt import QtCore, QtWidgets
 import pyqtgraph as pg
 import numpy as np
 import numpy.fft as fft
-
-class TimeAxisItem(pg.AxisItem):
-    def tickStrings(self, values, scale, spacing):
-        return values
 
 class BasePlot(object):
     def __init__(self, app, stream, n_plots, **kwargs):
@@ -50,7 +46,7 @@ class BasePlot(object):
         self.grid = [True for _ in range(self.n_plots)]
         self.pointsSize = 7
         self.fft_mode = False
-        self.last_name = ""
+        self.last_name = "" # Recuerda el nombre del ultimo plot dibujado
         self.point_color_index = -1 # -1 para que el conteo arranque en 0
         self.limit_scatter_points = 10
         self.mode = self.SIMPLE
@@ -167,7 +163,7 @@ class BasePlot(object):
             plot.setMenuEnabled()
 
         if "showGrid" in options:
-            self.toggle_grid(list(self.plots.values()).index(plot))
+            self.toggle_grid(list(self.plots.values()).index(plot), kwargs["showGrid"])
 
         if "curveClickable" in options:
             plotDataItems = plot.listDataItems()[0]
@@ -289,7 +285,7 @@ class BasePlot(object):
 
         for plot in self.plots.values():
             plot.setXRange(self.xlim - band, self.xlim)
-            plot.getAxis("bottom").setTickSpacing(major=band // 10, minor=1)
+            plot.getAxis("bottom").setTickSpacing(major=band // 10, minor=band)
 
     def autorange(self):
         """
@@ -336,11 +332,14 @@ class BasePlot(object):
         else:
             print("Fallo widget de seleccion de modo")
 
-    def toggle_grid(self, index):
+    def toggle_grid(self, index, value=None):
         """
         Alterna la visibilidad de la grilla.
         """
-        self.grid[index] = not self.grid[index]
+        if value:
+            self.grid[index] = value
+        else:
+            self.grid[index] = not self.grid[index]
 
         plot = list(self.plots.values())[index]
         plot.showGrid(self.grid[index], self.grid[index], alpha=255)
@@ -421,7 +420,6 @@ class BasePlot(object):
 
         plot = self.plots[name]
         plot_index = list(self.plots.keys()).index(name)
-        plot_dict = self._get_plot_info(plot)
         # Obtiene informacion de la grafica clickeada
 
         if self._verify_point_click(plot, plot_index, new_x, new_y):
@@ -472,7 +470,6 @@ class BasePlot(object):
             new_plot.setLabel("bottom", "Tiempo")
             new_plot.setLabel("left", "Tensión")
             new_plot.showAxes((True, False, False, True), showValues=(True, False, False, False))
-            new_plot.showGrid(True, True, 255)
             self._set_options(
                 new_plot,
                 **self.kwargs,
@@ -480,7 +477,6 @@ class BasePlot(object):
                 setMenuEnabled=True,
                 hideButtons=True,
                 curveClickable=True,
-                showGrid=True
             )
             self.layout.nextRow()
             self.scatter_plot_list.append(list())
