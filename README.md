@@ -14,3 +14,7 @@ pip install -r requirements.txt
 ```
 python main.py
 ```
+
+## Software
+
+This was designed to work with a Python software design with PyQT5. Software's repository can be found in this profile as "PythonOscilloscope".
